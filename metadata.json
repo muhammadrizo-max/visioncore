@@ -1,0 +1,6 @@
+{
+  "name": "CIPHER Team Workspace",
+  "description": "CIPHER jamoasi uchun barcha qulayliklarga ega bo'lgan mukammal virtual ishchi ofis platformasi",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

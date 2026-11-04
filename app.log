@@ -1,0 +1,82 @@
+nohup: ignoring input
+
+> react-example@0.0.0 dev
+> tsx server.ts
+
+◇ injected env (9) from .env // tip: ⌘ suppress logs { quiet: true }
+[PostgreSQL] Database pool created with DATABASE_URL.
+[CIPHER Server] Running at http://localhost:3000
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+
+- /var/www/f0354/data/www/f0354.55fh.xyz/cipher
+
+Refer to docs https://vite.dev/config/server-options.html#server-fs-allow for configurations and more details.
+
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+10:28:44 [vite] (client) ✨ new dependencies optimized: express, dotenv, vite, pg
+10:28:44 [vite] (client) ✨ optimized dependencies changed. reloading
+Files in the public directory are served at the root path.
+Instead of /public/config.js, use /config.js.
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
+✘ [ERROR] Missing "./internal" specifier in "vite" package [plugin vite:dep-pre-bundle]
+
+    node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:12200:24:
+      12200 │ function e(e,n,r){throw new Error(r?`No known conditions for "$...
+            ╵                         ^
+
+    at e (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:12200:25)
+    at n (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:12200:631)
+    at o (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:12200:1293)
+    at resolveExportsOrImports (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:16217:18)
+    at resolveDeepImport (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:16230:25)
+    at tryNodeResolve (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:16060:18)
+    at ResolveIdContext.resolveId (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:15831:19)
+    at EnvironmentPluginContainer.resolveId (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:42372:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async resolve (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:42961:12)
+    at async <anonymous> (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:42979:22)
+    at async <anonymous> (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:49220:16)
+
+  This error came from the "onResolve" callback registered here:
+
+    node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:12918:12:
+      12918 │       build.onResolve(
+            ╵             ~~~~~~~~~
+
+    at setup (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:12918:13)
+    at handlePlugins (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:1141:21)
+    at buildOrContextImpl (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:854:5)
+    at Object.buildOrContext (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:680:5)
+    at /var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:2035:68
+    at new Promise (<anonymous>)
+    at Object.context (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:2035:27)
+    at Object.context (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:1877:58)
+    at prepareEsbuildOptimizerRun (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:15122:33)
+
+  The plugin "vite:dep-pre-bundle" was triggered by this import
+
+    node_modules/@vitejs/plugin-react/dist/index.js:246:33:
+      246 │ ...ePlugin = (await import("vite/internal")).reactRefreshWrapperP...
+          ╵                            ~~~~~~~~~~~~~~~
+
+✘ [ERROR] No loader is configured for ".node" files: node_modules/@tailwindcss/oxide-linux-x64-gnu/tailwindcss-oxide.linux-x64-gnu.node
+
+    node_modules/@tailwindcss/oxide/index.js:288:34:
+      288 │ ...      const binding = require('@tailwindcss/oxide-linux-x64-gnu')
+          ╵                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+05:44:47 [vite] (client) error while updating dependencies:
+Error: Build failed with 2 errors:
+node_modules/@tailwindcss/oxide/index.js:288:34: ERROR: No loader is configured for ".node" files: node_modules/@tailwindcss/oxide-linux-x64-gnu/tailwindcss-oxide.linux-x64-gnu.node
+node_modules/vite/dist/node/chunks/dep-Dm0c1Wj2.js:12200:24: ERROR: [plugin: vite:dep-pre-bundle] Missing "./internal" specifier in "vite" package
+    at failureErrorWithLog (/var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:1467:15)
+    at /var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:926:25
+    at /var/www/f0354/data/www/f0354.55fh.xyz/cipher/node_modules/esbuild/lib/main.js:1345:9
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+The request url "/var/www/f0354/data/www/f0354.55fh.xyz/cipher/.env" is outside of Vite serving allow list.
