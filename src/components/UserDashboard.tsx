@@ -39,6 +39,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   // Role responsibility descriptions
   const getRoleResponsibilities = (role: string) => {
     switch (role) {
+      case 'creator':
+        return {
+          title: "Boshliq / Creator (Master)",
+          desc: "Guruh va sayt boshlig'i sifatidagi vazifalaringiz: Butun tizim, barcha panellar, loyihalar, a'zolarning rollari va xavfsizlik sozlamalari ustidan to'liq nazorat yuritish.",
+          actionLabel: "Creator Paneliga o'tish",
+          actionMenu: "Creator Panel"
+        };
       case 'engineer':
         return {
           title: "Bosh Muhandis (Engineer)",

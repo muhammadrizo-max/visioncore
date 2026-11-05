@@ -219,6 +219,7 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
                   onChange={(e) => setRole(e.target.value as RoleType)}
                   className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-blue-500 focus:outline-none"
                 >
+                  <option value="creator">Creator (Guruh Boshlig'i)</option>
                   <option value="researcher">Researcher (Tadqiqotchi)</option>
                   <option value="engineer">Engineer (Bosh muhandis)</option>
                   <option value="designer">Designer (Dizayner)</option>
@@ -371,6 +372,7 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
                               onChange={(e) => setEditRole(e.target.value as RoleType)}
                               className="px-2 py-1 rounded bg-slate-800 border text-xs"
                             >
+                              <option value="creator">creator</option>
                               <option value="researcher">researcher</option>
                               <option value="engineer">engineer</option>
                               <option value="designer">designer</option>

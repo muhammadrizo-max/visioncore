@@ -13,7 +13,8 @@ import {
   User as UserIcon, 
   Settings as SettingsIcon, 
   LogOut,
-  X
+  X,
+  Crown
 } from 'lucide-react';
 import { User } from '../types';
 import { getTranslation } from '../lib/translations';
@@ -46,11 +47,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   // Role-specific items after Chat
-  if (user.role === 'researcher') {
-    menuList.push({ name: 'Aqlli qidiruv', displayName: t.aiSearch, icon: Search });
-  } else if (user.role === 'engineer') {
+  if (user.role === 'creator') {
+    menuList.push({ name: 'Creator Panel', displayName: (t as any).creatorPanel || 'Creator Panel', icon: Crown });
     menuList.push({ name: 'Loyihalar', displayName: t.projects, icon: FolderGit2 });
     menuList.push({ name: 'A\'zo qo\'shish', displayName: t.addMember, icon: UserPlus });
+    menuList.push({ name: 'Aqlli qidiruv', displayName: t.aiSearch, icon: Search });
+    menuList.push({ name: 'Loyiha arxitekturasi', displayName: t.architecture, icon: Cpu });
+  } else if (user.role === 'engineer') {
+    menuList.push({ name: 'Creator Panel', displayName: (t as any).creatorPanel || 'Creator Panel', icon: Crown });
+    menuList.push({ name: 'Loyihalar', displayName: t.projects, icon: FolderGit2 });
+    menuList.push({ name: 'A\'zo qo\'shish', displayName: t.addMember, icon: UserPlus });
+  } else if (user.role === 'researcher') {
+    menuList.push({ name: 'Aqlli qidiruv', displayName: t.aiSearch, icon: Search });
   } else if (user.role === 'designer') {
     menuList.push({ name: 'Loyiha arxitekturasi', displayName: t.architecture, icon: Cpu });
   }

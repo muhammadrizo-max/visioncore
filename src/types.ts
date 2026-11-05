@@ -1,9 +1,10 @@
 export type RoleType = 
-  | 'user' 
+  | 'creator'
+  | 'engineer'
   | 'researcher' 
   | 'designer' 
   | 'analyst' 
-  | 'engineer';
+  | 'user';
 
 export type Language = 'uz' | 'en' | 'ru';
 

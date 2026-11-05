@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Project, ChatMessage, Task, NoteItem, VersionPlan, 
-  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, Language 
+  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, Language, SiteSettings 
 } from './types';
 import { 
   INITIAL_USERS, INITIAL_PROJECTS, INITIAL_CHATS, INITIAL_TASKS, 
   INITIAL_NOTES, INITIAL_VERSION_PLANS, INITIAL_TEST_REPORTS, 
-  INITIAL_ARCHITECTURE_DOCS, INITIAL_REMINDERS 
+  INITIAL_ARCHITECTURE_DOCS, INITIAL_REMINDERS, INITIAL_SITE_SETTINGS 
 } from './mockData';
 
 import { LandingPage } from './components/LandingPage';
@@ -21,6 +21,7 @@ import { TestReportsView } from './components/TestReportsView';
 import { ResearcherPanel } from './components/ResearcherPanel';
 import { EngineerPanel } from './components/EngineerPanel';
 import { DesignerPanel } from './components/DesignerPanel';
+import { CreatorPanel } from './components/CreatorPanel';
 import { ProfileView } from './components/ProfileView';
 import { SettingsView } from './components/SettingsView';
 
@@ -142,6 +143,12 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_REMINDERS;
   });
 
+  // Site Settings
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    const saved = localStorage.getItem('visioncore_site_settings') || localStorage.getItem('cipher_v4_site_settings');
+    return saved ? JSON.parse(saved) : INITIAL_SITE_SETTINGS;
+  });
+
   // Notifications
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     { id: 'N1', message: 'VisionCore Group Workspace xavfsiz seansida ish boshladingiz.', read: false, time: 'Hozir' },
@@ -192,6 +199,10 @@ export default function App() {
     localStorage.setItem('visioncore_reminders', JSON.stringify(reminders));
     localStorage.setItem('cipher_v4_reminders', JSON.stringify(reminders));
   }, [reminders]);
+
+  useEffect(() => {
+    localStorage.setItem('visioncore_site_settings', JSON.stringify(siteSettings));
+  }, [siteSettings]);
 
   useEffect(() => {
     if (currentUser) {
@@ -452,6 +463,25 @@ export default function App() {
               onSendMessage={handleSendMessage}
               onEditMessage={handleEditMessage}
               onDeleteMessage={handleDeleteMessage}
+              darkMode={darkMode}
+            />
+          )}
+
+          {activeMenu === 'Creator Panel' && (
+            <CreatorPanel 
+              currentUser={currentUser}
+              allUsers={users}
+              projects={projects}
+              tasks={tasks}
+              testReports={testReports}
+              notes={notes}
+              siteSettings={siteSettings}
+              onUpdateSiteSettings={setSiteSettings}
+              onAddMember={handleAddMember}
+              onUpdateMember={handleUpdateMember}
+              onDeleteMember={handleDeleteMember}
+              onSwitchUser={(user) => setCurrentUser(user)}
+              onNavigateMenu={(menu) => setActiveMenu(menu)}
               darkMode={darkMode}
             />
           )}
