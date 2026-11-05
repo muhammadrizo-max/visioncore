@@ -96,7 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Mobile Header with close button */}
           <div className="flex items-center justify-between md:hidden pb-2 border-b border-slate-200 dark:border-slate-800">
             <span className="text-xs font-bold uppercase tracking-wider text-blue-500">
-              CIPHER NAVIGATSIYA
+              VISIONCORE GROUP
             </span>
             <button
               onClick={onCloseMobile}

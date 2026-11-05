@@ -46,14 +46,19 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] flex-shrink-0">
             <Shield className="w-5 h-5" />
           </div>
-          <span className="text-lg font-bold tracking-wider bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent">
-            CIPHER
-          </span>
+          <div className="flex flex-col">
+            <span className="text-base font-bold tracking-wider bg-gradient-to-r from-blue-500 to-indigo-400 bg-clip-text text-transparent leading-tight">
+              VISIONCORE
+            </span>
+            <span className="text-[9px] uppercase font-semibold tracking-widest text-blue-400 leading-none">
+              Group Workspace
+            </span>
+          </div>
         </div>
         <div className="h-5 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block"></div>
         <div className="hidden sm:block">
           <h1 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{activeMenu}</h1>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400">CIPHER Workspace Virtual Office</p>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400">VisionCore Group Virtual Office</p>
         </div>
       </div>
 

@@ -40,7 +40,7 @@ async function queryGemini(query: string, apiKey?: string): Promise<string> {
     const ai = new GoogleGenAI({ apiKey: key });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `Siz CIPHER AI tadqiqot yordamchisiz (ai.google.dev). Quyidagi so'rov bo'yicha batafsil o'zbekcha tahlil tayyorlang:\n${query}`
+      contents: `Siz VisionCore Group AI tadqiqot yordamchisiz (ai.google.dev). Quyidagi so'rov bo'yicha batafsil o'zbekcha tahlil tayyorlang:\n${query}`
     });
     return response.text || "Gemini javob qaytarmadi.";
   } catch (e: any) {
@@ -208,7 +208,7 @@ async function runSearchBackend(payload: { query: string; engine?: string }): Pr
       resultText = results.join('\n\n---\n\n');
     } else {
       resultText =
-        `### 🌐 CIPHER Qidiruv Tizimi (Natija)\n\n` +
+        `### 🌐 VisionCore Group Qidiruv Tizimi (Natija)\n\n` +
         `So'rov: **"${query}"**\n\n` +
         `API kalitlar ro'yxati (Sozlamalar):\n` +
         `- **Tavily (tavily.com)**: \`TAVILY_API_KEY\`\n` +
@@ -270,7 +270,7 @@ app.get('/api/db/health', async (req, res) => {
 // Serve config with engineer credentials from environment
 app.get('/api/config', (req, res) => {
   res.json({
-    engineerUsername: process.env.ENGINEER_USERNAME || 'cipher-res98100',
+    engineerUsername: process.env.ENGINEER_USERNAME || 'vcg-admin',
     engineerPassword: process.env.ENGINEER_PASSWORD || 'vcg_mcc2ro'
   });
 });
@@ -292,7 +292,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[CIPHER Server] Running at http://localhost:${PORT}`);
+    console.log(`[VisionCore Group Server] Running at http://localhost:${PORT}`);
   });
 }
 

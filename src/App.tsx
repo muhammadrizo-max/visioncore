@@ -28,11 +28,12 @@ export default function App() {
   
   // Theme state
   const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('cipher_dark_mode');
+    const saved = localStorage.getItem('visioncore_dark_mode') || localStorage.getItem('cipher_dark_mode');
     return saved !== null ? JSON.parse(saved) : true;
   });
 
   useEffect(() => {
+    localStorage.setItem('visioncore_dark_mode', JSON.stringify(darkMode));
     localStorage.setItem('cipher_dark_mode', JSON.stringify(darkMode));
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -51,13 +52,13 @@ export default function App() {
             const exists = prev.some(u => u && u.username && u.username.toLowerCase() === data.engineerUsername.toLowerCase());
             if (!exists) {
               const engUser: User = {
-                id: 'CIPHER-ENG-98100',
+                id: 'VCG-ENG-001',
                 username: data.engineerUsername,
                 password: data.engineerPassword,
                 firstName: 'Bosh Muhandis',
-                lastName: '(Engineer)',
+                lastName: '(Admin)',
                 phone: '+998 90 000 00 00',
-                email: `${data.engineerUsername}@cipher.uz`,
+                email: `${data.engineerUsername}@visioncore.group`,
                 role: 'engineer',
                 avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
                 registeredAt: new Date().toISOString(),
@@ -74,16 +75,16 @@ export default function App() {
 
   // Current User Session
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('cipher_v4_current_user');
+    const saved = localStorage.getItem('visioncore_current_user') || localStorage.getItem('cipher_v4_current_user');
     return saved ? JSON.parse(saved) : null;
   });
 
   // All Team Members List
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_users');
+    const saved = localStorage.getItem('visioncore_users') || localStorage.getItem('cipher_v4_users');
     const parsed: User[] = saved ? JSON.parse(saved) : [];
     
-    // Always merge INITIAL_USERS so default engineer account exists
+    // Always merge INITIAL_USERS so default engineer accounts exist
     const merged = [...parsed];
     for (const initUser of INITIAL_USERS) {
       if (!merged.some(u => u && u.username && typeof u.username === 'string' && u.username.toLowerCase() === initUser.username.toLowerCase())) {
@@ -95,55 +96,55 @@ export default function App() {
 
   // Projects
   const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_projects');
+    const saved = localStorage.getItem('visioncore_projects') || localStorage.getItem('cipher_v4_projects');
     return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
   });
 
   // Chats
   const [chats, setChats] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_chats');
+    const saved = localStorage.getItem('visioncore_chats') || localStorage.getItem('cipher_v4_chats');
     return saved ? JSON.parse(saved) : INITIAL_CHATS;
   });
 
   // Tasks
   const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_tasks');
+    const saved = localStorage.getItem('visioncore_tasks') || localStorage.getItem('cipher_v4_tasks');
     return saved ? JSON.parse(saved) : INITIAL_TASKS;
   });
 
   // Notes
   const [notes, setNotes] = useState<NoteItem[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_notes');
+    const saved = localStorage.getItem('visioncore_notes') || localStorage.getItem('cipher_v4_notes');
     return saved ? JSON.parse(saved) : INITIAL_NOTES;
   });
 
   // Version Plans
   const [versionPlans, setVersionPlans] = useState<VersionPlan[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_version_plans');
+    const saved = localStorage.getItem('visioncore_version_plans') || localStorage.getItem('cipher_v4_version_plans');
     return saved ? JSON.parse(saved) : INITIAL_VERSION_PLANS;
   });
 
   // Test Reports
   const [testReports, setTestReports] = useState<TestReport[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_test_reports');
+    const saved = localStorage.getItem('visioncore_test_reports') || localStorage.getItem('cipher_v4_test_reports');
     return saved ? JSON.parse(saved) : INITIAL_TEST_REPORTS;
   });
 
   // Architecture Docs
   const [architectureDocs, setArchitectureDocs] = useState<ArchitectureDoc[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_architecture_docs');
+    const saved = localStorage.getItem('visioncore_architecture_docs') || localStorage.getItem('cipher_v4_architecture_docs');
     return saved ? JSON.parse(saved) : INITIAL_ARCHITECTURE_DOCS;
   });
 
   // Reminders
   const [reminders, setReminders] = useState<ReminderPlan[]>(() => {
-    const saved = localStorage.getItem('cipher_v4_reminders');
+    const saved = localStorage.getItem('visioncore_reminders') || localStorage.getItem('cipher_v4_reminders');
     return saved ? JSON.parse(saved) : INITIAL_REMINDERS;
   });
 
   // Notifications
   const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: 'N1', message: 'CIPHER Workspace xavfsiz seansida ish boshladingiz.', read: false, time: 'Hozir' },
+    { id: 'N1', message: 'VisionCore Group Workspace xavfsiz seansida ish boshladingiz.', read: false, time: 'Hozir' },
     { id: 'N2', message: 'Tizimda real-time muloqot va fayllar uzatish faol.', read: false, time: '10m oldin' }
   ]);
 
@@ -153,41 +154,51 @@ export default function App() {
 
   // Persistence Effects
   useEffect(() => {
+    localStorage.setItem('visioncore_users', JSON.stringify(users));
     localStorage.setItem('cipher_v4_users', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_chats', JSON.stringify(chats));
     localStorage.setItem('cipher_v4_chats', JSON.stringify(chats));
   }, [chats]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_tasks', JSON.stringify(tasks));
     localStorage.setItem('cipher_v4_tasks', JSON.stringify(tasks));
   }, [tasks]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_notes', JSON.stringify(notes));
     localStorage.setItem('cipher_v4_notes', JSON.stringify(notes));
   }, [notes]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_version_plans', JSON.stringify(versionPlans));
     localStorage.setItem('cipher_v4_version_plans', JSON.stringify(versionPlans));
   }, [versionPlans]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_test_reports', JSON.stringify(testReports));
     localStorage.setItem('cipher_v4_test_reports', JSON.stringify(testReports));
   }, [testReports]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_architecture_docs', JSON.stringify(architectureDocs));
     localStorage.setItem('cipher_v4_architecture_docs', JSON.stringify(architectureDocs));
   }, [architectureDocs]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_reminders', JSON.stringify(reminders));
     localStorage.setItem('cipher_v4_reminders', JSON.stringify(reminders));
   }, [reminders]);
 
   useEffect(() => {
     if (currentUser) {
+      localStorage.setItem('visioncore_current_user', JSON.stringify(currentUser));
       localStorage.setItem('cipher_v4_current_user', JSON.stringify(currentUser));
     } else {
+      localStorage.removeItem('visioncore_current_user');
       localStorage.removeItem('cipher_v4_current_user');
     }
   }, [currentUser]);
@@ -197,14 +208,14 @@ export default function App() {
     const handleStorageChange = (e: StorageEvent) => {
       if (!e.newValue) return;
       try {
-        if (e.key === 'cipher_v4_chats') setChats(JSON.parse(e.newValue));
-        if (e.key === 'cipher_v4_users') setUsers(JSON.parse(e.newValue));
-        if (e.key === 'cipher_v4_tasks') setTasks(JSON.parse(e.newValue));
-        if (e.key === 'cipher_v4_notes') setNotes(JSON.parse(e.newValue));
-        if (e.key === 'cipher_v4_version_plans') setVersionPlans(JSON.parse(e.newValue));
-        if (e.key === 'cipher_v4_test_reports') setTestReports(JSON.parse(e.newValue));
-        if (e.key === 'cipher_v4_architecture_docs') setArchitectureDocs(JSON.parse(e.newValue));
-        if (e.key === 'cipher_v4_reminders') setReminders(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_chats' || e.key === 'cipher_v4_chats') setChats(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_users' || e.key === 'cipher_v4_users') setUsers(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_tasks' || e.key === 'cipher_v4_tasks') setTasks(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_notes' || e.key === 'cipher_v4_notes') setNotes(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_version_plans' || e.key === 'cipher_v4_version_plans') setVersionPlans(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_test_reports' || e.key === 'cipher_v4_test_reports') setTestReports(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_architecture_docs' || e.key === 'cipher_v4_architecture_docs') setArchitectureDocs(JSON.parse(e.newValue));
+        if (e.key === 'visioncore_reminders' || e.key === 'cipher_v4_reminders') setReminders(JSON.parse(e.newValue));
       } catch (err) {
         console.error("Storage sync error:", err);
       }

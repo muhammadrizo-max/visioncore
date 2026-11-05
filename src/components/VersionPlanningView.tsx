@@ -17,7 +17,7 @@ export const VersionPlanningView: React.FC<VersionPlanningViewProps> = ({
   onSavePlan,
   darkMode
 }) => {
-  const selectedProject = projects[0] || { id: 'PROJ-101', name: 'Cipher Workspace Platform' };
+  const selectedProject = projects[0] || { id: 'PROJ-101', name: 'VisionCore Group Platform' };
   const [selectedProjectId, setSelectedProjectId] = useState<string>(selectedProject.id);
 
   // Active plan for selected project

@@ -66,7 +66,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </span>
             </div>
 
-            <p className="text-xs text-slate-400 font-mono">CIPHER ID: {user.id}</p>
+            <p className="text-xs text-slate-400 font-mono">VisionCore ID: {user.id}</p>
 
             <button
               id="profile-change-avatar-btn"

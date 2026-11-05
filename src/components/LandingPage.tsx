@@ -1,35 +1,52 @@
 import React, { useState } from 'react';
-import { Shield, Lock, UserCheck, Eye, EyeOff, Sparkles, User as UserIcon, LogIn } from 'lucide-react';
+import { 
+  Shield, 
+  Sparkles, 
+  Lock, 
+  User as UserIcon, 
+  LogIn, 
+  Eye, 
+  EyeOff, 
+  UserCheck,
+  KeyRound
+} from 'lucide-react';
 import { User, Language } from '../types';
-import { getTranslation } from '../lib/translations';
 import { INITIAL_USERS } from '../mockData';
+import { getTranslation } from '../lib/translations';
 
 interface LandingPageProps {
-  allUsers: User[];
   onLoginSuccess: (user: User) => void;
-  language: Language;
+  allUsers: User[];
+  language?: Language;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
-  allUsers,
   onLoginSuccess,
-  language
+  allUsers,
+  language = 'uz'
 }) => {
-  const t = getTranslation(language);
-
   const [firstName, setFirstName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const currentLang: Language = (language === 'en' || language === 'ru') ? language : 'uz';
+  const t = getTranslation(currentLang);
+
+  const fillAdminCredentials = () => {
+    setFirstName('Bosh Muhandis');
+    setUsername('vcg-admin');
+    setPassword('vcg_mcc2ro');
+    setErrorMsg('');
+  };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    const cleanFirstName = firstName.trim();
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = password.trim();
+    const cleanFirstName = firstName.trim();
 
     if (!cleanUsername) {
       setErrorMsg('Username kiriting!');
@@ -40,8 +57,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       return;
     }
 
-    // Standardize cipher- prefix check
-    const formattedUsername = cleanUsername.startsWith('cipher-') ? cleanUsername : `cipher-${cleanUsername}`;
+    // Standardize vcg- / cipher- prefixes
+    const vcgUsername = cleanUsername.startsWith('vcg-') ? cleanUsername : `vcg-${cleanUsername}`;
+    const cipherUsername = cleanUsername.startsWith('cipher-') ? cleanUsername : `cipher-${cleanUsername}`;
 
     // Combine current user list with initial default users
     const combinedUsers = [...allUsers, ...INITIAL_USERS];
@@ -52,7 +70,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         u &&
         u.username &&
         typeof u.username === 'string' &&
-        (u.username.toLowerCase() === cleanUsername || u.username.toLowerCase() === formattedUsername) &&
+        (
+          u.username.toLowerCase() === cleanUsername || 
+          u.username.toLowerCase() === vcgUsername ||
+          u.username.toLowerCase() === cipherUsername
+        ) &&
         u.password === cleanPassword
     );
 
@@ -64,18 +86,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       onLoginSuccess(updatedUser);
     } else {
       // Create new registered team member dynamically
+      const isEngineerOrAdmin = 
+        cleanUsername.includes('engineer') || 
+        cleanUsername.includes('admin') || 
+        cleanUsername === 'vcg-admin' || 
+        cleanUsername === 'cipher-res98100';
+
       const newUser: User = {
-        id: `CIPHER-USR-${Date.now().toString().slice(-5)}`,
+        id: `VCG-USR-${Date.now().toString().slice(-5)}`,
         username: cleanUsername,
         password: cleanPassword,
         firstName: cleanFirstName || "A'zo",
-        lastName: '',
+        lastName: isEngineerOrAdmin ? '(Admin)' : '',
         phone: '',
-        email: `${cleanUsername}@cipher.uz`,
-        role: (cleanUsername.includes('engineer') || cleanUsername === 'cipher-res98100') ? 'engineer' : 'user',
+        email: `${cleanUsername}@visioncore.group`,
+        role: isEngineerOrAdmin ? 'engineer' : 'user',
         avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${cleanUsername}`,
         registeredAt: new Date().toISOString(),
-        language: language || 'uz'
+        language: currentLang
       };
       onLoginSuccess(newUser);
     }
@@ -97,9 +125,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
           <div>
             <span className="text-xl font-bold tracking-wider bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
-              CIPHER WORKSPACE
+              VISIONCORE GROUP
             </span>
-            <p className="text-[10px] text-slate-400">Jamoaviy Ishchi Platforma</p>
+            <p className="text-[10px] text-slate-400">Jamoaviy Virtual Ishchi Platforma</p>
           </div>
         </div>
       </header>
@@ -114,8 +142,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
             <h2 className="text-2xl font-bold text-white pt-2">{t.welcome}</h2>
             <p className="text-xs text-slate-400 max-w-xs">
-              Tizimga kirish yoki a'zo bo'lish uchun ma'lumotlarni kiriting
+              VisionCore Group tizimiga kirish yoki a'zo bo'lish uchun ma'lumotlarni kiriting
             </p>
+          </div>
+
+          {/* Quick Admin Credentials Helper Box */}
+          <div className="p-3.5 rounded-2xl bg-blue-950/40 border border-blue-500/30 flex items-center justify-between gap-3 text-xs">
+            <div className="space-y-0.5">
+              <div className="flex items-center space-x-1.5 text-blue-400 font-semibold">
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Asosiy Admin / Muhandis:</span>
+              </div>
+              <div className="text-[11px] text-slate-300 font-mono">
+                Login: <strong className="text-white">vcg-admin</strong> | Parol: <strong className="text-white">vcg_mcc2ro</strong>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={fillAdminCredentials}
+              className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-[11px] transition whitespace-nowrap active:scale-95"
+            >
+              Kiritish
+            </button>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-4">
@@ -151,7 +199,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 id="login-username-input"
                 type="text"
                 required
-                placeholder="Usernameni kiriting"
+                placeholder="Usernameni kiriting (masalan: vcg-admin)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl focus:border-blue-500 focus:bg-slate-800 focus:outline-none transition text-sm text-white placeholder-slate-500 font-mono"
@@ -198,7 +246,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </main>
 
       <footer className="relative z-10 w-full text-center py-4 text-xs text-slate-500 border-t border-slate-900">
-        CIPHER Team Workspace &copy; {new Date().getFullYear()} - Barcha huquqlar himoyalangan.
+        VisionCore Group Workspace &copy; {new Date().getFullYear()} - Barcha huquqlar himoyalangan.
       </footer>
     </div>
   );

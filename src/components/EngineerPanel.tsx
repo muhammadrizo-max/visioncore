@@ -65,7 +65,7 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
   const generateUsername = () => {
     const randomNum = Math.floor(10000 + Math.random() * 90000);
     const rolePrefix = role.substring(0, 3);
-    setUsername(`cipher-${rolePrefix}${randomNum}`);
+    setUsername(`vcg-${rolePrefix}${randomNum}`);
   };
 
   const generatePassword = () => {
@@ -75,7 +75,7 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
 
   const handleCopyUsername = () => {
     if (!username) return;
-    const formatted = username.startsWith('cipher-') ? username : `cipher-${username}`;
+    const formatted = username.startsWith('vcg-') || username.startsWith('cipher-') ? username : `vcg-${username}`;
     navigator.clipboard.writeText(formatted);
     setCopiedUsername(true);
     setTimeout(() => setCopiedUsername(false), 2000);
@@ -96,21 +96,21 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
       return;
     }
 
-    // Ensure cipher- and vcg_ standards
-    const finalUsername = username.toLowerCase().startsWith('cipher-') 
+    // Ensure vcg- and vcg_ standards
+    const finalUsername = (username.toLowerCase().startsWith('vcg-') || username.toLowerCase().startsWith('cipher-')) 
       ? username.toLowerCase() 
-      : `cipher-${username.toLowerCase()}`;
+      : `vcg-${username.toLowerCase()}`;
 
     const finalPassword = password.startsWith('vcg_') ? password : `vcg_${password}`;
 
     const newUser: User = {
-      id: `CIPHER-${Math.floor(10000 + Math.random() * 90000)}`,
+      id: `VCG-${Math.floor(10000 + Math.random() * 90000)}`,
       username: finalUsername,
       password: finalPassword,
       firstName: '', // Filled by user upon first login
       lastName: `(${role.toUpperCase()})`,
       phone: '+998 90 000 00 00',
-      email: `${finalUsername}@cipher.uz`,
+      email: `${finalUsername}@visioncore.group`,
       role,
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
       registeredAt: new Date().toISOString()
@@ -131,9 +131,9 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
   };
 
   const saveEditMember = (user: User) => {
-    const finalUsername = editUsername.toLowerCase().startsWith('cipher-') 
+    const finalUsername = (editUsername.toLowerCase().startsWith('vcg-') || editUsername.toLowerCase().startsWith('cipher-')) 
       ? editUsername.toLowerCase() 
-      : `cipher-${editUsername.toLowerCase()}`;
+      : `vcg-${editUsername.toLowerCase()}`;
 
     const finalPassword = editPassword.startsWith('vcg_') ? editPassword : `vcg_${editPassword}`;
 
@@ -227,13 +227,13 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
                 </select>
               </div>
 
-              {/* Username & Password inputs with copy, generate, and cipher-/vcg_ standards */}
+              {/* Username & Password inputs with copy, generate, and vcg- / vcg_ standards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                 
                 {/* Username Input */}
                 <div className="space-y-1 relative">
                   <label className="text-xs font-semibold text-slate-400 flex justify-between">
-                    <span>Username (Standart: "cipher-...")</span>
+                    <span>Username (Standart: "vcg-...")</span>
                     {copiedUsername && <span className="text-green-400 text-[10px]">Nusxalandi!</span>}
                   </label>
 
@@ -242,7 +242,7 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
                       id="member-username-input"
                       type="text"
                       required
-                      placeholder="cipher-sardor90"
+                      placeholder="vcg-sardor90"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       className="w-full pl-4 pr-10 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:border-blue-500 font-mono"

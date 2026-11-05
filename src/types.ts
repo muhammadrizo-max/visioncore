@@ -8,8 +8,8 @@ export type RoleType =
 export type Language = 'uz' | 'en' | 'ru';
 
 export interface User {
-  id: string; // e.g. CIPHER-10001
-  username: string; // e.g. cipher-admin
+  id: string; // e.g. VCG-10001
+  username: string; // e.g. vcg-admin
   password?: string; // e.g. vcg_admin2026
   firstName: string;
   lastName: string;

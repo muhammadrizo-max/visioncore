@@ -2,7 +2,7 @@ import { Language } from '../types';
 
 export const TRANSLATIONS = {
   uz: {
-    appName: 'CIPHER Workspace',
+    appName: 'VisionCore Group Workspace',
     dashboard: 'Bosh sahifa',
     chat: 'Suhbat (Chat)',
     tasks: 'Vazifalar',
@@ -58,7 +58,7 @@ export const TRANSLATIONS = {
     memberList: 'Guruh a\'zolari ro\'yxati'
   },
   en: {
-    appName: 'CIPHER Workspace',
+    appName: 'VisionCore Group Workspace',
     dashboard: 'Dashboard',
     chat: 'Chat',
     tasks: 'Tasks',
@@ -114,7 +114,7 @@ export const TRANSLATIONS = {
     memberList: 'Team Members List'
   },
   ru: {
-    appName: 'CIPHER Workspace',
+    appName: 'VisionCore Group Workspace',
     dashboard: 'Главная',
     chat: 'Чат',
     tasks: 'Задачи',

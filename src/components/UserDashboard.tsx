@@ -89,7 +89,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           <div className="space-y-2">
             <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold">
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>CIPHER Virtual Office</span>
+              <span>VisionCore Group Virtual Office</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
               Assalomu alaykum, {user.firstName}!
