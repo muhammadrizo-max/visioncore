@@ -1,292 +1,539 @@
 import React, { useState } from 'react';
 import { 
+  Rocket, 
   Shield, 
-  Sparkles, 
+  Bot, 
+  Globe, 
+  Layout, 
+  Smartphone, 
+  Briefcase, 
+  CheckCircle2, 
+  ArrowRight, 
+  Users, 
+  Star, 
+  DollarSign, 
+  Clock, 
   Lock, 
-  User as UserIcon, 
-  LogIn, 
-  Eye, 
-  EyeOff, 
-  UserCheck, 
-  Crown, 
-  ChevronDown,
-  Info
+  Sparkles, 
+  ChevronRight, 
+  X,
+  Send,
+  ExternalLink,
+  Code2
 } from 'lucide-react';
-import { User, Language, RoleType } from '../types';
-import { INITIAL_USERS } from '../mockData';
+import { User, Language, ProjectType } from '../types';
 import { getTranslation } from '../lib/translations';
 import { generateVcgUserId } from '../lib/idGenerator';
 
 interface LandingPageProps {
-  onLoginSuccess: (user: User) => void;
   allUsers: User[];
+  onLoginSuccess: (user: User) => void;
   language?: Language;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
-  onLoginSuccess,
   allUsers,
+  onLoginSuccess,
   language = 'uz'
 }) => {
-  const [firstName, setFirstName] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [showRoleList, setShowRoleList] = useState(false);
-
-  const currentLang: Language = (language === 'en' || language === 'ru') ? language : 'uz';
+  const [currentLang, setCurrentLang] = useState<Language>(language);
   const t = getTranslation(currentLang);
 
-  const setCredentials = (roleName: string, u: string, p: string) => {
-    setFirstName(roleName);
-    setUsername(u);
-    setPassword(p);
-    setErrorMsg('');
-    setShowRoleList(false);
-  };
+  // Auth Modal State
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Form Fields
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [phone, setPhone] = useState('+998 ');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Interactive Project Cost Estimator (Saytlab style)
+  const [calcType, setCalcType] = useState<ProjectType>('telegram_bot');
+  const [calcSpeed, setCalcSpeed] = useState<'normal' | 'express'>('normal');
+  const [calcFeatures, setCalcFeatures] = useState<string[]>(['auth', 'admin']);
+
+  const services = [
+    {
+      type: 'telegram_bot',
+      title: 'Telegram Botlar',
+      desc: 'Avtomatlashtirilgan savdo, to\'lov qabul qilish va mijozlarga 24/7 xizmat ko\'rsatish botlari.',
+      price: 'от $150',
+      time: '3-7 kun',
+      icon: Bot,
+      tags: ['Click/Payme', 'Admin Panel', 'Avto-xabar']
+    },
+    {
+      type: 'web_app',
+      title: 'Web Ilovalar (SaaS)',
+      desc: 'Murakkab biznes boshqaruvi, shaxsiy kabinetlar va yuqori yuklamali veb-platformalar.',
+      price: 'от $400',
+      time: '10-20 kun',
+      icon: Layout,
+      tags: ['React', 'Node.js', 'PostgreSQL', 'API']
+    },
+    {
+      type: 'crm',
+      title: 'CRM Tizimlari',
+      desc: 'Customer Relationship Management: savdo voronkasi, xodimlar nazorati va moliyaviy tahlil.',
+      price: 'от $600',
+      time: '15-30 kun',
+      icon: Briefcase,
+      tags: ['Savdo Tahlili', 'Xodimlar KPI', 'Telegram SMS']
+    },
+    {
+      type: 'website',
+      title: 'Websaytlar & Portallar',
+      desc: 'Kompaniya nufuzini oshiruvchi ultra-tez, SEO optimallashtirilgan rasmiy veb-saytlar.',
+      price: 'от $250',
+      time: '5-12 kun',
+      icon: Globe,
+      tags: ['Ultra Tez', 'SEO', 'Mobil Moslik']
+    },
+    {
+      type: 'mobile_app',
+      title: 'Mobil Ilovalar',
+      desc: 'iOS va Android uchun qulay, zamonaviy va tezkor ishlovchi mobil dasturlar.',
+      price: 'от $800',
+      time: '20-40 kun',
+      icon: Smartphone,
+      tags: ['Flutter', 'React Native', 'Cross-platform']
+    },
+    {
+      type: 'landing_page',
+      title: 'Landing Page',
+      desc: 'Mahsulot yoki xizmatni taqdim etuvchi va yuqori sotuv keltiruvchi bitta sahifali sayt.',
+      price: 'от $120',
+      time: '2-5 kun',
+      icon: Rocket,
+      tags: ['Yuqori Konversiya', 'A/B Test', 'Tezkor']
+    }
+  ];
+
+  const portfolio = [
+    {
+      title: 'FastDelivery Express Logistika',
+      cat: 'Web App & Telegram Bot',
+      image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600',
+      desc: 'Kuryerlar, restoranlar va mijozlar uchun 3 tomonlama avtomatlashtirilgan yetkazib berish tizimi.',
+      tags: ['React', 'PostgreSQL', 'Telegram API']
+    },
+    {
+      title: 'FinCore Smart CRM & Accounting',
+      cat: 'CRM Tizimi',
+      image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=600',
+      desc: 'Omborxona, kassa, xodimlar samaradorligi va avtomatik moliyaviy hisobotlar platformasi.',
+      tags: ['Supabase', 'Real-time Chart', 'TypeScript']
+    },
+    {
+      title: 'LuxeEstate Ko\'chmas Mulk Portali',
+      cat: 'Websayt & Katalog',
+      image: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=600',
+      desc: '3D interaktiv xarita, filtrlar va xaridorlar bilan onlayn shartnoma tuzish tizimi.',
+      tags: ['Next.js', 'Tailwind', 'SEO Ready']
+    }
+  ];
+
+  // Auth Form Submit
+  const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
-    const cleanUsername = username.trim().toLowerCase();
-    const cleanPassword = password.trim();
-    const cleanFirstName = firstName.trim();
-
-    if (!cleanUsername) {
-      setErrorMsg('Username kiriting!');
+    if (password.length < 6) {
+      setErrorMsg('Parol kamida 6 ta belgidan iborat bo\'lishi shart!');
       return;
     }
 
-    // Password must be at least 6 characters (cannot be less than 6 as explicitly requested)
-    if (!cleanPassword || cleanPassword.length < 6) {
-      setErrorMsg('Parol kamida 6 ta belgidan iborat bo\'lishi shart! (6 tadan kam kiritish mumkin emas)');
-      return;
-    }
+    if (isRegisterMode) {
+      if (!username.trim()) {
+        setErrorMsg('Foydalanuvchi nomini kiriting!');
+        return;
+      }
+      const finalUsername = username.toLowerCase().trim();
+      const exists = allUsers.some(u => u.username.toLowerCase() === finalUsername);
+      if (exists) {
+        setErrorMsg('Ushbu foydalanuvchi nomi allaqachon mavjud!');
+        return;
+      }
 
-    // Standardize vcg- / cipher- prefixes
-    const vcgUsername = cleanUsername.startsWith('vcg-') ? cleanUsername : `vcg-${cleanUsername}`;
-    const cipherUsername = cleanUsername.startsWith('cipher-') ? cleanUsername : `cipher-${cleanUsername}`;
-
-    // Combine current user list with initial default users
-    const combinedUsers = [...allUsers, ...INITIAL_USERS];
-
-    // Find user by username & password
-    const foundUser = combinedUsers.find(
-      u =>
-        u &&
-        u.username &&
-        typeof u.username === 'string' &&
-        (
-          u.username.toLowerCase() === cleanUsername || 
-          u.username.toLowerCase() === vcgUsername ||
-          u.username.toLowerCase() === cipherUsername
-        ) &&
-        u.password === cleanPassword
-    );
-
-    if (foundUser) {
-      const updatedUser: User = {
-        ...foundUser,
-        firstName: cleanFirstName || foundUser.firstName || cleanUsername
-      };
-      onLoginSuccess(updatedUser);
-    } else {
-      // Dynamic registration for new visitors / clients
-      const isCreator = cleanUsername.includes('creator') || cleanUsername === 'vcg-creator';
-      const isEngineer = cleanUsername.includes('admin') || cleanUsername === 'vcg-admin' || cleanUsername === 'cipher-res98100';
-
-      // Oddiy userlar uchun qat'iy cheklangan "user" roli beriladi
-      const userRole: RoleType = isCreator ? 'creator' : isEngineer ? 'engineer' : 'user';
-
-      // 12-character ID generation: e.g. "vcg-74920183" (exactly 12 characters)
-      const uniqueId = generateVcgUserId();
+      // Generate exact 12-char VCG id: vcg + (- or _) + 8 digits
+      const generatedId = generateVcgUserId();
 
       const newUser: User = {
-        id: uniqueId,
-        username: cleanUsername,
-        password: cleanPassword,
-        firstName: cleanFirstName || cleanUsername,
-        lastName: isCreator ? '(Boshliq)' : '',
-        phone: '',
-        telegramUsername: '',
-        email: `${cleanUsername}@visioncore.group`,
-        role: userRole,
-        avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${cleanUsername}`,
+        id: generatedId,
+        username: finalUsername,
+        password: password,
+        firstName: firstName.trim() || finalUsername,
+        lastName: lastName.trim() || '',
+        phone: phone.trim() || '+998 90 000 00 00',
+        email: `${finalUsername}@visioncore.group`,
+        role: 'user', // Regular user
+        avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${finalUsername}`,
         registeredAt: new Date().toISOString(),
         language: currentLang
       };
+
       onLoginSuccess(newUser);
+    } else {
+      // Login mode
+      const userFound = allUsers.find(
+        u => u.username.toLowerCase() === username.toLowerCase().trim() && u.password === password
+      );
+
+      if (userFound) {
+        onLoginSuccess(userFound);
+      } else {
+        setErrorMsg('Login yoki parol noto\'g\'ri kiritildi!');
+      }
     }
   };
 
   return (
-    <div 
-      className="relative min-h-screen flex flex-col justify-between text-white font-sans bg-slate-950 bg-cover bg-center"
-      style={{ backgroundImage: "url('/input_file_0.png')" }}
-    >
-      {/* Dark overlay for rich contrast */}
-      <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm z-0"></div>
-
-      {/* Header Bar */}
-      <header className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 py-6 flex items-center justify-between">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-600 selection:text-white">
+      
+      {/* 1. NAVBAR (Saytlab style modern header) */}
+      <header className="sticky top-0 z-40 w-full bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-4 sm:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.5)]">
-            <Shield className="w-6 h-6 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-[0_0_20px_rgba(37,99,235,0.5)]">
+            <Shield className="w-5 h-5 stroke-[2.5]" />
           </div>
-          <div>
-            <span className="text-lg sm:text-xl font-bold tracking-wider bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
-              VISIONCORE GROUP
+          <div className="flex flex-col">
+            <span className="text-base sm:text-lg font-black tracking-wider bg-gradient-to-r from-blue-400 to-indigo-300 bg-clip-text text-transparent">
+              VISIONCORE
             </span>
-            <p className="text-[10px] text-slate-400">Jamoaviy Virtual Ishchi Platforma</p>
+            <span className="text-[9px] uppercase font-bold tracking-widest text-blue-400">
+              Group Workspace
+            </span>
           </div>
+        </div>
+
+        <div className="flex items-center space-x-3">
+          {/* Language select */}
+          <select
+            value={currentLang}
+            onChange={(e) => setCurrentLang(e.target.value as Language)}
+            className="bg-slate-900 border border-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-xl text-slate-300 focus:outline-none cursor-pointer"
+          >
+            <option value="uz">O'zbekcha</option>
+            <option value="en">English</option>
+            <option value="ru">Русский</option>
+          </select>
+
+          {/* Login / Register trigger */}
+          <button
+            onClick={() => {
+              setIsRegisterMode(false);
+              setShowAuthModal(true);
+            }}
+            className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm transition shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 cursor-pointer"
+          >
+            {t.login}
+          </button>
         </div>
       </header>
 
-      {/* Central Login Container */}
-      <main className="relative z-10 w-full max-w-md mx-auto px-4 sm:px-6 py-6 flex-grow flex flex-col items-center justify-center">
-        <div className="w-full p-6 sm:p-8 rounded-3xl bg-slate-900/95 border border-slate-800 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex flex-col space-y-5">
-          
-          <div className="flex flex-col items-center text-center space-y-2">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-[0_8px_20px_rgba(37,99,235,0.3)] border border-white/20">
-              <Sparkles className="w-7 h-7 text-white" />
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white pt-1">{t.welcome}</h2>
-            <p className="text-xs text-slate-400 max-w-xs leading-relaxed">
-              Ismingiz va foydalanuvchi ma'lumotlarini kiriting
-            </p>
-          </div>
+      {/* 2. HERO SECTION (High-Tech Saytlab style) */}
+      <section className="relative overflow-hidden py-20 px-4 sm:px-8 max-w-7xl mx-auto text-center space-y-8">
+        
+        {/* Ambient Glow background */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-blue-600/15 rounded-full blur-[130px] pointer-events-none" />
 
-          {/* Quick Creator / Admin Panel Access Helper */}
-          <div className="rounded-2xl bg-amber-950/40 border border-amber-500/40 p-3.5 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-1.5 text-amber-300 font-bold">
-                <Crown className="w-4 h-4 fill-amber-300/30 text-amber-300" />
-                <span>Boshliq (Creator) Paneli:</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCredentials('Boshliq (Creator)', 'vcg-creator', 'vcg_mcc2ro')}
-                className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] transition active:scale-95 shadow-sm cursor-pointer"
+        <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-blue-600/10 border border-blue-500/30 text-blue-400 text-xs font-bold">
+          <Sparkles className="w-4 h-4" />
+          <span>Professional IT va Dasturiy Yechimlar Markazi</span>
+        </div>
+
+        <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight max-w-4xl mx-auto leading-tight">
+          Biznesingiz uchun <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">aqlli, tezkor va daromad keltiruvchi</span> IT tizimlar
+        </h1>
+
+        <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
+          VisionCore Group — Telegram botlar, Web ilovalar, CRM va murakkab dasturiy ta'minotlarni eng yuqori sifat va zamonaviy arxitektura asosida yaratadi.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+          <button
+            onClick={() => {
+              setIsRegisterMode(true);
+              setShowAuthModal(true);
+            }}
+            className="px-8 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm transition shadow-[0_0_30px_rgba(37,99,235,0.4)] flex items-center space-x-2 active:scale-95 cursor-pointer"
+          >
+            <span>{t.startProject}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => {
+              setIsRegisterMode(false);
+              setShowAuthModal(true);
+            }}
+            className="px-8 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-sm transition active:scale-95 cursor-pointer"
+          >
+            <span>{t.login} (Virtual Ofis)</span>
+          </button>
+        </div>
+
+        {/* Live Counters */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 max-w-4xl mx-auto border-t border-slate-800/80">
+          <div className="space-y-1">
+            <div className="text-2xl sm:text-3xl font-black text-blue-400">50+</div>
+            <div className="text-xs text-slate-400">Yaratilgan Loyihalar</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-2xl sm:text-3xl font-black text-emerald-400">99.8%</div>
+            <div className="text-xs text-slate-400">Tizim Ishonchliligi</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-2xl sm:text-3xl font-black text-purple-400">24/7</div>
+            <div className="text-xs text-slate-400">Qo'llab-quvvatlash</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-2xl sm:text-3xl font-black text-amber-400">100%</div>
+            <div className="text-xs text-slate-400">Kafolatlangan Sifat</div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. SERVICES SECTION (Saytlab style cards) */}
+      <section className="py-16 px-4 sm:px-8 max-w-7xl mx-auto space-y-10">
+        <div className="text-center space-y-3">
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+            Biz Nimalarni Taklif Qilamiz?
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
+            Kichik biznesdan tortib yirik korxonalargacha bo'lgan barcha bosqichdagi dasturiy xizmatlar
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {services.map((srv) => {
+            const Icon = srv.icon;
+            return (
+              <div 
+                key={srv.type}
+                className="p-6 rounded-3xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all duration-300 hover:scale-[1.02] flex flex-col justify-between space-y-4 group shadow-sm"
               >
-                Kirish
-              </button>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-600/10 text-blue-400 flex items-center justify-center font-bold group-hover:bg-blue-600 group-hover:text-white transition">
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+                      {srv.price}
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-bold text-white group-hover:text-blue-400 transition">
+                    {srv.title}
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {srv.desc}
+                  </p>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {srv.tags.map(t => (
+                      <span key={t} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700/60 font-mono">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
+                  <span className="text-slate-500 flex items-center space-x-1">
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{srv.time}</span>
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsRegisterMode(true);
+                      setShowAuthModal(true);
+                    }}
+                    className="text-blue-400 font-bold hover:underline flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>Buyurtma</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 4. PORTFOLIO SHOWCASE (Qilingan ishlar) */}
+      <section className="py-16 px-4 sm:px-8 max-w-7xl mx-auto space-y-10 border-t border-slate-800">
+        <div className="text-center space-y-3">
+          <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
+            Bizning Qilingan Ishlarimiz (Portfolio)
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
+            VisionCore Group jamoasi tomonidan muvaffaqiyatli topshirilgan loyihalar
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {portfolio.map((item) => (
+            <div 
+              key={item.title}
+              className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-lg group hover:border-blue-500/40 transition"
+            >
+              <div className="relative overflow-hidden h-44">
+                <img 
+                  src={item.image} 
+                  alt={item.title} 
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-500" 
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
+                <span className="absolute bottom-3 left-3 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-blue-600 text-white uppercase tracking-wider">
+                  {item.cat}
+                </span>
+              </div>
+
+              <div className="p-5 space-y-2">
+                <h3 className="text-sm font-bold text-white group-hover:text-blue-400 transition line-clamp-1">
+                  {item.title}
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
+                  {item.desc}
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-2">
+                  {item.tags.map(tag => (
+                    <span key={tag} className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 5. FOOTER */}
+      <footer className="border-t border-slate-800 py-10 px-4 sm:px-8 text-center text-xs text-slate-500 space-y-3">
+        <div className="flex items-center justify-center space-x-2">
+          <Shield className="w-4 h-4 text-blue-500" />
+          <span className="font-bold text-slate-300">VISIONCORE GROUP</span>
+        </div>
+        <p>© 2026 VisionCore Group. Barcha huquqlar himoyalangan.</p>
+        <p className="text-[11px] text-slate-600">Telegram Admin: @visioncore_admin | Tel: +998 90 000 00 00</p>
+      </footer>
+
+      {/* 6. AUTH MODAL (Sign In & Sign Up with 12-char ID & 6-char pass validation) */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-md p-6 sm:p-8 rounded-3xl bg-slate-900 border border-slate-800 text-white shadow-2xl space-y-5">
             
-            <div className="text-[11px] text-slate-300 font-mono flex items-center justify-between">
-              <span>Login: <strong className="text-amber-200">vcg-creator</strong> | Parol: <strong className="text-white">vcg_mcc2ro</strong></span>
-              <button
-                type="button"
-                onClick={() => setShowRoleList(!showRoleList)}
-                className="text-amber-400 hover:text-amber-300 flex items-center space-x-0.5 text-[10px] underline ml-2 cursor-pointer"
-              >
-                <span>Yordam</span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${showRoleList ? 'rotate-180' : ''}`} />
-              </button>
+            <button
+              onClick={() => setShowAuthModal(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center space-y-1">
+              <div className="w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-500 mx-auto flex items-center justify-center font-bold">
+                <Shield className="w-6 h-6" />
+              </div>
+              <h3 className="text-xl font-black">
+                {isRegisterMode ? t.register : t.login}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {isRegisterMode ? 'Yangi foydalanuvchi hisobini yarating' : 'VisionCore Group platformasiga kiring'}
+              </p>
             </div>
 
-            {/* Hint for requirements */}
-            {showRoleList && (
-              <div className="pt-2 border-t border-amber-500/20 text-[11px] text-slate-300 space-y-1 animate-in fade-in duration-200">
-                <p>• <strong>Oddiy foydalanuvchi:</strong> Istalgan username va parol bilan yangi hisob ochishingiz mumkin.</p>
-                <p>• <strong>ID:</strong> Kirishingiz bilan 12 xonali maxsus ID (masalan: <code>vcg-84920193</code>) beriladi.</p>
-                <p>• <strong>Xavfsizlik:</strong> Parol kamida 6 belgidan iborat bo'lishi shart.</p>
-              </div>
-            )}
-          </div>
-
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
             {errorMsg && (
-              <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 text-center font-semibold leading-relaxed">
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold">
                 {errorMsg}
               </div>
             )}
 
-            {/* Ism (First Name) */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1">
-                <UserIcon className="w-3.5 h-3.5 text-blue-400" />
-                <span>Ismingiz</span>
-              </label>
-              <input 
-                id="login-firstname-input"
-                type="text"
-                placeholder="Ismingizni kiriting (masalan: Alisher)"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                className="w-full px-4 py-2.5 sm:py-3 bg-slate-800/80 border border-slate-700 rounded-xl focus:border-blue-500 focus:bg-slate-800 focus:outline-none transition text-sm text-white placeholder-slate-500 font-medium"
-              />
-            </div>
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              {isRegisterMode && (
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Ismingiz"
+                    value={firstName}
+                    onChange={e => setFirstName(e.target.value)}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Familiyangiz"
+                    value={lastName}
+                    onChange={e => setLastName(e.target.value)}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
 
-            {/* Username */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1">
-                  <UserCheck className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Username</span>
-                  <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[10px] text-slate-400">kamida 6 ta tavsiya</span>
-              </div>
-              <input 
-                id="login-username-input"
-                type="text"
-                required
-                placeholder="Usernameni kiriting"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2.5 sm:py-3 bg-slate-800/80 border border-slate-700 rounded-xl focus:border-blue-500 focus:bg-slate-800 focus:outline-none transition text-sm text-white placeholder-slate-500 font-mono"
-              />
-            </div>
-
-            {/* Parol */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-300 flex items-center space-x-1">
-                  <Lock className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Parol</span>
-                  <span className="text-rose-500">*</span>
-                </label>
-                <span className="text-[10px] text-amber-400">kamida 6 ta shart, 8 ta tavsiya</span>
-              </div>
-              <div className="relative">
-                <input 
-                  id="login-password-input"
-                  type={showPassword ? "text" : "password"}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400">{t.username}</label>
+                <input
+                  type="text"
                   required
-                  minLength={6}
-                  placeholder="Kamida 6 ta belgi kiriting"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-4 pr-10 py-2.5 sm:py-3 bg-slate-800/80 border border-slate-700 rounded-xl focus:border-blue-500 focus:bg-slate-800 focus:outline-none transition text-sm text-white placeholder-slate-500 font-mono"
+                  placeholder="masalan: vcg-creator yoki sardor99"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-mono text-white focus:outline-none focus:border-blue-500"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
               </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-400">{t.password} (kamida 6 belgi)</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-mono text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm transition shadow-lg active:scale-95 cursor-pointer"
+              >
+                {isRegisterMode ? t.register : t.login}
+              </button>
+            </form>
+
+            <div className="text-center pt-2 border-t border-slate-800 text-xs text-slate-400">
+              {isRegisterMode ? (
+                <span>
+                  Allaqachon hisobingiz bormi?{' '}
+                  <button 
+                    onClick={() => { setIsRegisterMode(false); setErrorMsg(''); }}
+                    className="text-blue-400 font-bold hover:underline cursor-pointer"
+                  >
+                    Kirish
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  Hisobingiz yo'qmi?{' '}
+                  <button 
+                    onClick={() => { setIsRegisterMode(true); setErrorMsg(''); }}
+                    className="text-blue-400 font-bold hover:underline cursor-pointer"
+                  >
+                    Ro'yxatdan o'tish
+                  </button>
+                </span>
+              )}
             </div>
 
-            <button 
-              id="login-submit-btn"
-              type="submit"
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-98 transition text-sm font-bold text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] mt-2 flex items-center justify-center space-x-2 cursor-pointer"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Tizimga Kirish</span>
-            </button>
-          </form>
-
+          </div>
         </div>
-      </main>
+      )}
 
-      <footer className="relative z-10 w-full text-center py-4 text-xs text-slate-500 border-t border-slate-900">
-        VisionCore Group Workspace &copy; {new Date().getFullYear()} - Barcha huquqlar himoyalangan.
-      </footer>
     </div>
   );
 };

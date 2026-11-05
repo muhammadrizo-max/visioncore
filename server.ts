@@ -267,6 +267,41 @@ app.get('/api/db/health', async (req, res) => {
   }
 });
 
+// Live Chat in-memory store for instant multi-user real-time sync
+const liveChats: any[] = [];
+
+app.get('/api/chats', (req, res) => {
+  res.json(liveChats);
+});
+
+app.post('/api/chats', (req, res) => {
+  const msg = req.body;
+  if (!msg || !msg.id) {
+    res.status(400).json({ error: 'Message payload invalid' });
+    return;
+  }
+  const existingIdx = liveChats.findIndex((m: any) => m.id === msg.id);
+  if (existingIdx >= 0) {
+    liveChats[existingIdx] = msg;
+  } else {
+    liveChats.push(msg);
+  }
+  // Keep up to 500 recent messages
+  if (liveChats.length > 500) {
+    liveChats.splice(0, liveChats.length - 500);
+  }
+  res.json({ success: true, message: msg });
+});
+
+app.delete('/api/chats/:id', (req, res) => {
+  const { id } = req.params;
+  const idx = liveChats.findIndex((m: any) => m.id === id);
+  if (idx >= 0) {
+    liveChats.splice(idx, 1);
+  }
+  res.json({ success: true });
+});
+
 // Serve config with engineer credentials from environment
 app.get('/api/config', (req, res) => {
   res.json({

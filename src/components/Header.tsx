@@ -24,7 +24,30 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleSidebar,
   onNavigateMenu
 }) => {
-  const t = getTranslation(user.language || 'uz');
+  const currentLang: Language = (user.language || 'uz') as Language;
+  const t = getTranslation(currentLang);
+
+  // Translate activeMenu for header title display
+  const getDisplayHeaderTitle = (menu: string) => {
+    switch (menu) {
+      case 'Bosh sahifa': return t.dashboard;
+      case 'Chat': return t.chat;
+      case 'Mijoz Buyurtmalari': return t.clientOrders;
+      case 'A\'zolar': return t.members;
+      case 'Loyihalar': return t.projects;
+      case 'Vazifalar': return t.tasks;
+      case 'Note': return t.notes;
+      case 'Buyurtma berish': return t.orders;
+      case 'Profile':
+      case 'Profil': return t.profile;
+      case 'Sozlamalar': return t.settings;
+      case 'Aqlli qidiruv': return t.aiSearch;
+      case 'Loyiha arxitekturasi': return t.architecture;
+      case 'Test Natijalari': return t.testReports;
+      case 'Versiyalash & Rejalash': return t.versioning;
+      default: return menu;
+    }
+  };
 
   return (
     <header className={`sticky top-0 z-40 w-full border-b transition-colors ${
@@ -33,9 +56,8 @@ export const Header: React.FC<HeaderProps> = ({
         : 'bg-white/95 border-slate-200 text-slate-900'
     } backdrop-blur-md px-3 sm:px-6 py-3 flex items-center justify-between`}>
       
-      {/* Brand & Sidebar Toggle Button (Image 1 Shield <-> ChevronLeft) */}
+      {/* Brand & Sidebar Toggle Button */}
       <div className="flex items-center space-x-3">
-        {/* The Toggle Button requested in Image 1: Shield when closed, < (ChevronLeft) when open */}
         <button
           id="header-sidebar-toggle-btn"
           onClick={onToggleSidebar}
@@ -61,26 +83,25 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
         
         <div className="hidden sm:block">
-          <h1 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">{activeMenu}</h1>
+          <h1 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
+            {getDisplayHeaderTitle(activeMenu)}
+          </h1>
           <p className="text-[10px] text-slate-500 dark:text-slate-400">VisionCore Group Virtual Office</p>
         </div>
       </div>
 
-      {/* Right side controls: Creator Switcher, Language, Theme, User Profile */}
+      {/* Right side controls: Role Badge, Language, Theme, User Profile */}
       <div className="flex items-center space-x-2 sm:space-x-3">
         
-        {/* Creator Panel Quick Badge if user is Creator */}
+        {/* Creator / Admin Quick Badge */}
         {user.role === 'creator' && (
           <button
-            onClick={() => onNavigateMenu('Creator Panel')}
-            className={`hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition shadow-sm ${
-              activeMenu === 'Creator Panel'
-                ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400/50'
-                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-950'
-            }`}
+            onClick={() => onNavigateMenu('Bosh sahifa')}
+            className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-950 transition cursor-pointer"
+            title="Boshqaruv Markazi"
           >
             <Crown className="w-3.5 h-3.5 fill-current" />
-            <span>Creator Panel</span>
+            <span>CREATOR</span>
           </button>
         )}
 
@@ -93,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Globe className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
           <select
             id="header-language-select"
-            value={user.language || 'uz'}
+            value={currentLang}
             onChange={(e) => onLanguageChange(e.target.value as Language)}
             className="bg-transparent focus:outline-none font-semibold cursor-pointer text-slate-700 dark:text-slate-200"
           >
@@ -121,7 +142,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           id="header-user-profile-btn"
           onClick={() => onNavigateMenu('Profile')}
-          className={`flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800 p-1 rounded-xl transition ${
+          className={`flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800 p-1 rounded-xl transition cursor-pointer ${
             activeMenu === 'Profile'
               ? 'bg-blue-50 dark:bg-blue-900/30'
               : 'hover:bg-slate-100 dark:hover:bg-slate-800/60'

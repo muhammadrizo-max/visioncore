@@ -2,18 +2,17 @@ import React from 'react';
 import { 
   LayoutDashboard, 
   MessageSquare, 
-  Search, 
-  UserPlus, 
+  Users, 
   FolderGit2, 
-  Cpu, 
   StickyNote, 
   User as UserIcon, 
   Settings as SettingsIcon, 
   LogOut,
   ChevronLeft,
-  Crown,
   ShoppingBag,
   CheckSquare,
+  Search,
+  Cpu,
   GitBranch,
   FileSpreadsheet
 } from 'lucide-react';
@@ -41,31 +40,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   language = 'uz'
 }) => {
-  const t = getTranslation(language || user.language || 'uz');
+  const currentLang: Language = (language || user.language || 'uz') as Language;
+  const t = getTranslation(currentLang);
 
-  // Build menu list based on role
+  // Build menu list strictly according to user role requirements
   const menuList: { name: string; displayName: string; icon: any }[] = [];
 
-  // Creator gets full master control first
   if (user.role === 'creator') {
-    menuList.push({ name: 'Creator Panel', displayName: (t as any).creatorPanel || 'Creator Panel', icon: Crown });
-    menuList.push({ name: 'Buyurtmalar', displayName: 'Mijoz Buyurtmalari', icon: ShoppingBag });
+    // 3.1 & 3.3 for Creator:
+    // Removed Creator Panel button, removed Test results, versioning, search, architecture
+    // Added dedicated Mijoz Buyurtmalari, renamed A'zo qo'shish to A'zolar
     menuList.push({ name: 'Bosh sahifa', displayName: t.dashboard, icon: LayoutDashboard });
-    menuList.push({ name: 'Chat', displayName: t.chat, icon: MessageSquare });
+    menuList.push({ name: 'Mijoz Buyurtmalari', displayName: t.clientOrders, icon: ShoppingBag });
+    menuList.push({ name: 'A\'zolar', displayName: t.members, icon: Users });
     menuList.push({ name: 'Loyihalar', displayName: t.projects, icon: FolderGit2 });
-    menuList.push({ name: 'A\'zo qo\'shish', displayName: t.addMember, icon: UserPlus });
-    menuList.push({ name: 'Aqlli qidiruv', displayName: t.aiSearch, icon: Search });
-    menuList.push({ name: 'Loyiha arxitekturasi', displayName: t.architecture, icon: Cpu });
     menuList.push({ name: 'Vazifalar', displayName: t.tasks, icon: CheckSquare });
-    menuList.push({ name: 'Note', displayName: t.notes, icon: StickyNote });
-    menuList.push({ name: 'Versiyalash & Rejalash', displayName: t.versioning, icon: GitBranch });
-    menuList.push({ name: 'Test Natijalari', displayName: t.testReports, icon: FileSpreadsheet });
-  } else if (user.role === 'engineer') {
-    menuList.push({ name: 'Creator Panel', displayName: (t as any).creatorPanel || 'Creator Panel', icon: Crown });
-    menuList.push({ name: 'Bosh sahifa', displayName: t.dashboard, icon: LayoutDashboard });
     menuList.push({ name: 'Chat', displayName: t.chat, icon: MessageSquare });
+    menuList.push({ name: 'Note', displayName: t.notes, icon: StickyNote });
+  } else if (user.role === 'engineer') {
+    menuList.push({ name: 'Bosh sahifa', displayName: t.dashboard, icon: LayoutDashboard });
+    menuList.push({ name: 'Mijoz Buyurtmalari', displayName: t.clientOrders, icon: ShoppingBag });
+    menuList.push({ name: 'A\'zolar', displayName: t.members, icon: Users });
     menuList.push({ name: 'Loyihalar', displayName: t.projects, icon: FolderGit2 });
-    menuList.push({ name: 'A\'zo qo\'shish', displayName: t.addMember, icon: UserPlus });
+    menuList.push({ name: 'Vazifalar', displayName: t.tasks, icon: CheckSquare });
+    menuList.push({ name: 'Chat', displayName: t.chat, icon: MessageSquare });
     menuList.push({ name: 'Note', displayName: t.notes, icon: StickyNote });
   } else if (user.role === 'researcher') {
     menuList.push({ name: 'Bosh sahifa', displayName: t.dashboard, icon: LayoutDashboard });
@@ -84,9 +82,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     menuList.push({ name: 'Versiyalash & Rejalash', displayName: t.versioning, icon: GitBranch });
     menuList.push({ name: 'Note', displayName: t.notes, icon: StickyNote });
   } else {
-    // ODDIY USER (Regular Client / Visitor)
-    // As explicitly requested: Vazifalar, versiyalash va test natijalari OLIB TASHLANDI!
-    // O'rniga Buyurtma berish (Order a project) QO'SHILDI!
+    // ODDIY USER (Client / Visitor):
+    // Simple, clean: Bosh sahifa, Chat, Buyurtma berish, Note
     menuList.push({ name: 'Bosh sahifa', displayName: t.dashboard, icon: LayoutDashboard });
     menuList.push({ name: 'Chat', displayName: t.chat, icon: MessageSquare });
     menuList.push({ name: 'Buyurtma berish', displayName: t.orders, icon: ShoppingBag });
@@ -107,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   if (!isOpen) {
-    return null; // When sidebar is toggled closed, hide it completely to give full room to content
+    return null;
   }
 
   return (
@@ -136,7 +133,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
             </div>
             
-            {/* Close Button with "<" symbol as requested by user */}
             <button
               onClick={onCloseMobile}
               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
@@ -158,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 return (
                   <button
                     key={item.name}
-                    id={`sidebar-menu-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+                    id={`sidebar-menu-${item.name.toLowerCase().replace(/[\s']/g, '-')}`}
                     onClick={() => handleMenuClick(item.name)}
                     className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer active:scale-98 ${
                       isActive
@@ -208,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         </div>
 
-        {/* Logout button at bottom of sidebar (as requested: "u sidebarni ichida bolsa yetadi") */}
+        {/* Logout button at bottom of sidebar */}
         <div className="p-4 border-t border-slate-200 dark:border-slate-800">
           <button
             id="sidebar-logout-btn"

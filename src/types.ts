@@ -54,6 +54,10 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   adminNotes?: string;
+  acceptedById?: string;
+  acceptedByName?: string;
+  assignedMemberId?: string;
+  assignedMemberName?: string;
 }
 
 export interface Task {
@@ -139,6 +143,8 @@ export interface ChatMessage {
   chatId: string;
   attachmentUrl?: string;
   isEdited?: boolean;
+  audioUrl?: string; // Voice message base64 or audio blob URL
+  audioDuration?: number; // duration in seconds
 }
 
 export interface ReminderPlan {
@@ -156,11 +162,48 @@ export interface LogMessage {
   timestamp: string;
 }
 
+export interface MemberActivity {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  action: string;
+  target?: string;
+  timestamp: string;
+}
+
+export interface PortfolioItem {
+  id: string;
+  title: string;
+  category: string;
+  image: string;
+  description: string;
+  tags: string[];
+  link?: string;
+}
+
+export interface ServiceItem {
+  id: string;
+  type: ProjectType;
+  title: string;
+  description: string;
+  startingPrice: string;
+  timeline: string;
+  features: string[];
+}
+
 export interface SiteSettings {
   siteName: string;
   logo: string;
   telegramUsername: string;
+  phoneContact?: string;
   isPrivate: boolean;
+  creatorBackgroundType?: 'default' | 'matrix' | 'custom_image';
+  creatorBackgroundImage?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  services?: ServiceItem[];
+  portfolio?: PortfolioItem[];
 }
 
 export interface NotificationItem {

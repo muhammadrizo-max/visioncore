@@ -1,11 +1,12 @@
 import { 
   User, Project, ChatMessage, Task, NoteItem, VersionPlan, 
-  TestReport, ArchitectureDoc, ReminderPlan, LogMessage, SiteSettings, Order 
+  TestReport, ArchitectureDoc, ReminderPlan, LogMessage, SiteSettings, Order, MemberActivity 
 } from './types';
 
+// Keep essential accounts so the creator and admin can immediately log in
 export const INITIAL_USERS: User[] = [
   {
-    id: 'vcg-90000001', // Exactly 12 characters: vcg (3) + '-' (1) + 8 digits
+    id: 'vcg-90000001', // Exactly 12 characters
     username: 'vcg-creator',
     password: 'vcg_mcc2ro',
     firstName: 'Boshliq',
@@ -27,149 +28,21 @@ export const INITIAL_USERS: User[] = [
     phone: '+998 90 000 00 00',
     email: 'admin@visioncore.group',
     telegramUsername: '@visioncore_admin',
-    role: 'creator',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-    language: 'uz'
-  },
-  {
-    id: 'vcg-90000003',
-    username: 'cipher-res98100',
-    password: 'vcg_mcc2ro',
-    firstName: 'Bosh Muhandis',
-    lastName: '(Engineer)',
-    phone: '+998 90 000 00 00',
-    email: 'engineer@visioncore.group',
-    telegramUsername: '@visioncore_eng',
     role: 'engineer',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
     registeredAt: new Date().toISOString(),
     language: 'uz'
-  },
-  {
-    id: 'vcg-90000004',
-    username: 'vcg-researcher',
-    password: 'vcg_mcc2ro',
-    firstName: 'Tadqiqotchi',
-    lastName: '(AI Researcher)',
-    phone: '+998 90 111 22 33',
-    email: 'researcher@visioncore.group',
-    telegramUsername: '@vcg_researcher',
-    role: 'researcher',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-    language: 'uz'
-  },
-  {
-    id: 'vcg-90000005',
-    username: 'vcg-designer',
-    password: 'vcg_mcc2ro',
-    firstName: 'Dizayner',
-    lastName: '(UI/UX & Architect)',
-    phone: '+998 90 222 33 44',
-    email: 'designer@visioncore.group',
-    telegramUsername: '@vcg_designer',
-    role: 'designer',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-    language: 'uz'
-  },
-  {
-    id: 'vcg-90000006',
-    username: 'vcg-analyst',
-    password: 'vcg_mcc2ro',
-    firstName: 'Tahlilchi',
-    lastName: '(Analyst)',
-    phone: '+998 90 333 44 55',
-    email: 'analyst@visioncore.group',
-    telegramUsername: '@vcg_analyst',
-    role: 'analyst',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-    language: 'uz'
-  },
-  {
-    id: 'vcg_84920193', // 12-char with '_'
-    username: 'vcg-user',
-    password: 'vcg_mcc2ro',
-    firstName: 'Jamoa A\'zosi',
-    lastName: '(Mijoz)',
-    phone: '+998 90 444 55 66',
-    email: 'member@visioncore.group',
-    telegramUsername: '@vcg_client',
-    role: 'user',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-    language: 'uz'
   }
 ];
 
-export const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'ORD-1001',
-    userId: 'vcg_84920193',
-    clientName: 'Sardorbek Rahimov',
-    clientPhone: '+998 90 123 45 67',
-    clientTelegram: '@sardor_online',
-    projectType: 'telegram_bot',
-    projectName: 'Savdo va Yetkazib Berish Telegram Boti',
-    description: 'Mijozlar buyurtma bera oladigan va to\'lov qila oladigan ko\'p funksiyali Telegram bot tizimi.',
-    budget: '$500 - $1,000',
-    deadline: '15 kun',
-    status: 'in_review',
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString()
-  },
-  {
-    id: 'ORD-1002',
-    userId: 'vcg_84920193',
-    clientName: 'Azizbek Toshmatov',
-    clientPhone: '+998 94 987 65 43',
-    clientTelegram: '@aziz_business',
-    projectType: 'crm',
-    projectName: 'Kompaniya Savdo CRM Tizimi',
-    description: 'CRM (Customer Relationship Management) tizimi: savdo voronkasi, mijozlar bazasi va xodimlar samaradorligi nazorati.',
-    budget: '$1,500 - $3,000',
-    deadline: '1 oy',
-    status: 'accepted',
-    createdAt: new Date(Date.now() - 3600000 * 48).toISOString()
-  }
-];
+// Clean mock data - real entries will be created by the team
+export const INITIAL_ORDERS: Order[] = [];
 
-export const INITIAL_PROJECTS: Project[] = [
-  {
-    id: 'PROJ-101',
-    name: 'VisionCore Group Production Platform',
-    description: 'Boshqaruv, tadqiqot, loyihalar va jamoaviy muloqot tizimi.',
-    status: 'In Development',
-    version: 'v1.0.0'
-  }
-];
+export const INITIAL_PROJECTS: Project[] = [];
 
-export const INITIAL_TASKS: Task[] = [
-  {
-    id: 'TASK-1',
-    title: 'Platforma xavfsizligini tekshirish',
-    description: 'Barcha API endpointlar va autentifikatsiya tizimi tahlili',
-    completed: false,
-    createdById: 'vcg-90000001',
-    createdByName: 'Boshliq (Creator)',
-    assignedToId: 'vcg-90000002',
-    assignedToName: 'Bosh Muhandis (Admin)',
-    date: new Date().toISOString()
-  }
-];
+export const INITIAL_TASKS: Task[] = [];
 
-export const INITIAL_NOTES: NoteItem[] = [
-  {
-    id: 'NOTE-1',
-    title: 'VisionCore Group Strategik Reja',
-    content: '1. Buyurtmalar qabuli va mijozlar bilan muloqot\n2. Tizim arxitekturasi dizayni\n3. Sifatli dasturiy ta\'minot relizlari',
-    isPrivate: false,
-    authorId: 'vcg-90000001',
-    authorName: 'Boshliq (Creator)',
-    createdAt: new Date().toISOString()
-  }
-];
+export const INITIAL_NOTES: NoteItem[] = [];
 
 export const INITIAL_VERSION_PLANS: VersionPlan[] = [];
 
@@ -183,9 +56,107 @@ export const INITIAL_REMINDERS: ReminderPlan[] = [];
 
 export const INITIAL_LOGS: LogMessage[] = [];
 
+export const INITIAL_ACTIVITIES: MemberActivity[] = [
+  {
+    id: 'ACT-1',
+    userId: 'vcg-90000001',
+    userName: 'Boshliq (Creator)',
+    userRole: 'creator',
+    action: 'Tizim ishga tushirildi va sozlamalar yangilandi',
+    timestamp: new Date().toISOString()
+  }
+];
+
 export const INITIAL_SITE_SETTINGS: SiteSettings = {
-  siteName: 'VisionCore Group Workspace',
+  siteName: 'VisionCore Group',
   logo: 'Shield',
   telegramUsername: '@visioncore_admin',
-  isPrivate: true
+  phoneContact: '+998 90 000 00 00',
+  isPrivate: false,
+  creatorBackgroundType: 'default',
+  creatorBackgroundImage: '',
+  heroTitle: 'Zamonaviy IT Loyihalar va Dasturiy Yechimlar Markazi',
+  heroSubtitle: 'Biznesingiz uchun professional Telegram botlar, Web ilovalar, CRM tizimlari va yuqori tezlikdagi veb-saytlar yaratamiz.',
+  services: [
+    {
+      id: 'srv-1',
+      type: 'telegram_bot',
+      title: 'Telegram Botlar',
+      description: 'Avtomatlashtirilgan savdo, to\'lov qabul qilish, CRM integratsiyasi va mijozlarga 24/7 xizmat ko\'rsatish botlari.',
+      startingPrice: 'от $150',
+      timeline: '3 - 7 kun',
+      features: ['Click/Payme to\'lov', 'Admin panel', 'Avto-javob', 'Foydalanuvchilar bazasi']
+    },
+    {
+      id: 'srv-2',
+      type: 'web_app',
+      title: 'Web Ilovalar (SaaS & Platformalar)',
+      description: 'Murakkab funksionallikka ega shaxsiy kabinetlar, biznes portallari va interaktiv platformalar.',
+      startingPrice: 'от $400',
+      timeline: '10 - 20 kun',
+      features: ['Yuqori xavfsizlik', 'Real-time sinxronizatsiya', 'Moslashuvchan dizayn', 'API integratsiya']
+    },
+    {
+      id: 'srv-3',
+      type: 'crm',
+      title: 'CRM Tizimlari',
+      description: 'Customer Relationship Management: savdo voronkasi, xodimlar nazorati va moliyaviy hisobotlar.',
+      startingPrice: 'от $600',
+      timeline: '15 - 30 kun',
+      features: ['Savdo tahlillari', 'Xodimlar samaradorligi', 'SMS/Telegram xabarnomalar', 'Excel eksport']
+    },
+    {
+      id: 'srv-4',
+      type: 'website',
+      title: 'Korporativ Websaytlar',
+      description: 'Kompaniya va brend nufuzini oshiruvchi zamonaviy, tezkor va SEO optimallashtirilgan saytlar.',
+      startingPrice: 'от $250',
+      timeline: '5 - 12 kun',
+      features: ['SEO optimizatsiya', 'Ultra-tez yuklanish', 'Mobil moslik', 'Katalog va menyu']
+    },
+    {
+      id: 'srv-5',
+      type: 'landing_page',
+      title: 'Landing Page (Sotuv Sahifalari)',
+      description: 'Mijozlar e\'tiborini tortuvchi va yuqori konversiyali bir sahifali taqdimot sayti.',
+      startingPrice: 'от $120',
+      timeline: '2 - 5 kun',
+      features: ['A/B testga tayyor', 'Yuqori konversiya', 'Animatsiyalar', 'Telegramga tushuvchi arizalar']
+    },
+    {
+      id: 'srv-6',
+      type: 'mobile_app',
+      title: 'Mobil Ilovalar',
+      description: 'iOS va Android qurilmalarida qulay ishlovchi zamonaviy mobil ilovalar.',
+      startingPrice: 'от $800',
+      timeline: '20 - 45 kun',
+      features: ['Push-bildirishnomalar', 'Cross-platform', 'Offline rejim', 'App Store & Google Play']
+    }
+  ],
+  portfolio: [
+    {
+      id: 'port-1',
+      title: 'FastDelivery Logistika Platformasi',
+      category: 'Web App & Bot',
+      image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600',
+      description: 'Kuryerlar uchun ilova, restoranlar uchun boshqaruv paneli va mijozlar boti.',
+      tags: ['React', 'Node.js', 'Telegram API', 'PostgreSQL']
+    },
+    {
+      id: 'port-2',
+      title: 'FinCore Smart CRM & Accounting',
+      category: 'CRM Tizimi',
+      image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=600',
+      description: 'Katta savdo tarmog\'i uchun kassa, ombor va xodimlar nazorati platformasi.',
+      tags: ['TypeScript', 'Tailwind', 'Real-time Chart', 'Supabase']
+    },
+    {
+      id: 'port-3',
+      title: 'LuxeEstate Ko\'chmas Mulk Portali',
+      category: 'Korporativ Websayt',
+      image: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=600',
+      description: 'Interaktiv 3D xarita, filtrlar va onlayn bron qilish tizimi bilan jihozlangan sayt.',
+      tags: ['Next.js', 'Tailwind', 'SEO', 'Mobile Friendly']
+    }
+  ]
 };

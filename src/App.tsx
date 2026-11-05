@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Project, ChatMessage, Task, NoteItem, VersionPlan, 
-  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, Language, SiteSettings, Order 
+  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, Language, SiteSettings, Order, MemberActivity 
 } from './types';
 import { 
   INITIAL_USERS, INITIAL_PROJECTS, INITIAL_CHATS, INITIAL_TASKS, 
   INITIAL_NOTES, INITIAL_VERSION_PLANS, INITIAL_TEST_REPORTS, 
-  INITIAL_ARCHITECTURE_DOCS, INITIAL_REMINDERS, INITIAL_SITE_SETTINGS, INITIAL_ORDERS 
+  INITIAL_ARCHITECTURE_DOCS, INITIAL_REMINDERS, INITIAL_SITE_SETTINGS, INITIAL_ORDERS, INITIAL_ACTIVITIES 
 } from './mockData';
 
 import { LandingPage } from './components/LandingPage';
@@ -21,13 +21,30 @@ import { TestReportsView } from './components/TestReportsView';
 import { ResearcherPanel } from './components/ResearcherPanel';
 import { EngineerPanel } from './components/EngineerPanel';
 import { DesignerPanel } from './components/DesignerPanel';
-import { CreatorPanel } from './components/CreatorPanel';
 import { OrderView } from './components/OrderView';
+import { OrdersManagementView } from './components/OrdersManagementView';
+import { MembersView } from './components/MembersView';
 import { ProfileView } from './components/ProfileView';
 import { SettingsView } from './components/SettingsView';
+import { MatrixRain } from './components/MatrixRain';
 
 export default function App() {
   
+  // Clean old mock data on first load to provide real clean slate
+  useEffect(() => {
+    const isCleaned = localStorage.getItem('visioncore_clean_v3');
+    if (!isCleaned) {
+      localStorage.removeItem('visioncore_tasks');
+      localStorage.removeItem('visioncore_projects');
+      localStorage.removeItem('visioncore_test_reports');
+      localStorage.removeItem('visioncore_version_plans');
+      localStorage.removeItem('visioncore_architecture_docs');
+      localStorage.removeItem('visioncore_orders');
+      localStorage.removeItem('visioncore_notes');
+      localStorage.setItem('visioncore_clean_v3', 'true');
+    }
+  }, []);
+
   // Theme state
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('visioncore_dark_mode') || localStorage.getItem('cipher_dark_mode');
@@ -36,7 +53,6 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('visioncore_dark_mode', JSON.stringify(darkMode));
-    localStorage.setItem('cipher_dark_mode', JSON.stringify(darkMode));
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -44,51 +60,19 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Sync Engineer credentials from backend .env config
-  useEffect(() => {
-    fetch('/api/config')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.engineerUsername && data.engineerPassword) {
-          setUsers(prev => {
-            const exists = prev.some(u => u && u.username && u.username.toLowerCase() === data.engineerUsername.toLowerCase());
-            if (!exists) {
-              const engUser: User = {
-                id: 'vcg-88192014',
-                username: data.engineerUsername,
-                password: data.engineerPassword,
-                firstName: 'Bosh Muhandis',
-                lastName: '(Admin)',
-                phone: '+998 90 000 00 00',
-                email: `${data.engineerUsername}@visioncore.group`,
-                role: 'engineer',
-                avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-                registeredAt: new Date().toISOString(),
-                language: 'uz'
-              };
-              return [engUser, ...prev];
-            }
-            return prev;
-          });
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   // Current User Session
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('visioncore_current_user') || localStorage.getItem('cipher_v4_current_user');
+    const saved = localStorage.getItem('visioncore_current_user');
     return saved ? JSON.parse(saved) : null;
   });
 
   // All Team Members List
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('visioncore_users') || localStorage.getItem('cipher_v4_users');
+    const saved = localStorage.getItem('visioncore_users');
     const parsed: User[] = saved ? JSON.parse(saved) : [];
-    
     const merged = [...parsed];
     for (const initUser of INITIAL_USERS) {
-      if (!merged.some(u => u && u.username && typeof u.username === 'string' && u.username.toLowerCase() === initUser.username.toLowerCase())) {
+      if (!merged.some(u => u && u.username && u.username.toLowerCase() === initUser.username.toLowerCase())) {
         merged.unshift(initUser);
       }
     }
@@ -103,65 +87,71 @@ export default function App() {
 
   // Projects
   const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem('visioncore_projects') || localStorage.getItem('cipher_v4_projects');
+    const saved = localStorage.getItem('visioncore_projects');
     return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
   });
 
   // Chats
   const [chats, setChats] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('visioncore_chats') || localStorage.getItem('cipher_v4_chats');
+    const saved = localStorage.getItem('visioncore_chats');
     return saved ? JSON.parse(saved) : INITIAL_CHATS;
   });
 
   // Tasks
   const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem('visioncore_tasks') || localStorage.getItem('cipher_v4_tasks');
+    const saved = localStorage.getItem('visioncore_tasks');
     return saved ? JSON.parse(saved) : INITIAL_TASKS;
   });
 
   // Notes
   const [notes, setNotes] = useState<NoteItem[]>(() => {
-    const saved = localStorage.getItem('visioncore_notes') || localStorage.getItem('cipher_v4_notes');
+    const saved = localStorage.getItem('visioncore_notes');
     return saved ? JSON.parse(saved) : INITIAL_NOTES;
   });
 
   // Version Plans
   const [versionPlans, setVersionPlans] = useState<VersionPlan[]>(() => {
-    const saved = localStorage.getItem('visioncore_version_plans') || localStorage.getItem('cipher_v4_version_plans');
+    const saved = localStorage.getItem('visioncore_version_plans');
     return saved ? JSON.parse(saved) : INITIAL_VERSION_PLANS;
   });
 
   // Test Reports
   const [testReports, setTestReports] = useState<TestReport[]>(() => {
-    const saved = localStorage.getItem('visioncore_test_reports') || localStorage.getItem('cipher_v4_test_reports');
+    const saved = localStorage.getItem('visioncore_test_reports');
     return saved ? JSON.parse(saved) : INITIAL_TEST_REPORTS;
   });
 
   // Architecture Docs
   const [architectureDocs, setArchitectureDocs] = useState<ArchitectureDoc[]>(() => {
-    const saved = localStorage.getItem('visioncore_architecture_docs') || localStorage.getItem('cipher_v4_architecture_docs');
+    const saved = localStorage.getItem('visioncore_architecture_docs');
     return saved ? JSON.parse(saved) : INITIAL_ARCHITECTURE_DOCS;
   });
 
   // Reminders
   const [reminders, setReminders] = useState<ReminderPlan[]>(() => {
-    const saved = localStorage.getItem('visioncore_reminders') || localStorage.getItem('cipher_v4_reminders');
+    const saved = localStorage.getItem('visioncore_reminders');
     return saved ? JSON.parse(saved) : INITIAL_REMINDERS;
+  });
+
+  // Member Activities
+  const [activities, setActivities] = useState<MemberActivity[]>(() => {
+    const saved = localStorage.getItem('visioncore_activities');
+    return saved ? JSON.parse(saved) : INITIAL_ACTIVITIES;
   });
 
   // Site Settings
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
-    const saved = localStorage.getItem('visioncore_site_settings') || localStorage.getItem('cipher_v4_site_settings');
+    const saved = localStorage.getItem('visioncore_site_settings');
     return saved ? JSON.parse(saved) : INITIAL_SITE_SETTINGS;
   });
 
   // Notifications
   const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: 'N1', message: 'VisionCore Group Workspace tizimiga muvaffaqiyatli kirdingiz.', read: false, time: 'Hozir' },
-    { id: 'N2', message: 'Dasturiy ta\'minot va bot buyurtmalari uchun "Buyurtma berish" bo\'limi faol.', read: false, time: '5m oldin' }
+    { id: 'N1', message: 'VisionCore Group platformasiga muvaffaqiyatli kirdingiz.', read: false, time: 'Hozir' },
+    { id: 'N2', message: 'Dasturiy xizmatlar va jamoaviy virtual ofis faol holatda.', read: false, time: '5m oldin' }
   ]);
 
-  // Active Menu & Sidebar State (Opens by default, collapses when shield / < is clicked)
+  // Active Menu & Sidebar State
   const [activeMenu, setActiveMenu] = useState<string>('Bosh sahifa');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
@@ -187,20 +177,16 @@ export default function App() {
   }, [notes]);
 
   useEffect(() => {
-    localStorage.setItem('visioncore_version_plans', JSON.stringify(versionPlans));
-  }, [versionPlans]);
-
-  useEffect(() => {
-    localStorage.setItem('visioncore_test_reports', JSON.stringify(testReports));
-  }, [testReports]);
-
-  useEffect(() => {
-    localStorage.setItem('visioncore_architecture_docs', JSON.stringify(architectureDocs));
-  }, [architectureDocs]);
+    localStorage.setItem('visioncore_projects', JSON.stringify(projects));
+  }, [projects]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_reminders', JSON.stringify(reminders));
   }, [reminders]);
+
+  useEffect(() => {
+    localStorage.setItem('visioncore_activities', JSON.stringify(activities));
+  }, [activities]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_site_settings', JSON.stringify(siteSettings));
@@ -214,18 +200,32 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Login Handler
+  // Activity logger helper
+  const logActivity = (action: string) => {
+    if (!currentUser) return;
+    const newAct: MemberActivity = {
+      id: `ACT-${Date.now()}`,
+      userId: currentUser.id,
+      userName: `${currentUser.firstName || currentUser.username} ${currentUser.lastName || ''}`.trim(),
+      userRole: currentUser.role,
+      action,
+      timestamp: new Date().toISOString()
+    };
+    setActivities(prev => [newAct, ...prev]);
+  };
+
+  // Auth Handlers
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     setActiveMenu('Bosh sahifa');
+    logActivity('Tizimga muvaffaqiyatli kirdi');
   };
 
-  // Logout Handler
   const handleLogout = () => {
+    logActivity('Tizimdan chiqdi');
     setCurrentUser(null);
   };
 
-  // Language change handler
   const handleLanguageChange = (lang: Language) => {
     if (!currentUser) return;
     const updated = { ...currentUser, language: lang };
@@ -233,42 +233,41 @@ export default function App() {
     setUsers(users.map(u => u.id === updated.id ? updated : u));
   };
 
-  // Profile Avatar update handler
   const handleUpdateAvatar = (newAvatarUrl: string) => {
     if (!currentUser) return;
     const updated = { ...currentUser, avatar: newAvatarUrl };
     setCurrentUser(updated);
     setUsers(users.map(u => u.id === updated.id ? updated : u));
+    logActivity('Shaxsiy profil rasmini yangiladi');
   };
 
-  // User Profile update handler
   const handleUpdateUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    setNotifications(prev => [
-      { id: `N-${Date.now()}`, message: 'Profil ma\'lumotlaringiz yangilandi.', read: false, time: 'Hozir' },
-      ...prev
-    ]);
+    logActivity('Shaxsiy profil ma\'lumotlarini saqladi');
   };
 
-  // Order Handlers
+  // Orders Handlers
   const handleAddOrder = (newOrder: Order) => {
     setOrders(prev => [newOrder, ...prev]);
+    logActivity(`Yangi loyiha buyurtmasi topshirdi: "${newOrder.projectName}"`);
     setNotifications(prev => [
-      { id: `N-${Date.now()}`, message: `Yangi buyurtma qabul qilindi: "${newOrder.projectName}" (${newOrder.projectType})`, read: false, time: 'Hozir' },
+      { id: `N-${Date.now()}`, message: `Yangi buyurtma keldi: "${newOrder.projectName}" (${newOrder.projectType})`, read: false, time: 'Hozir' },
       ...prev
     ]);
   };
 
   const handleUpdateOrder = (updatedOrder: Order) => {
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+    logActivity(`"${updatedOrder.projectName}" buyurtmasi statusini yangiladi: ${updatedOrder.status}`);
   };
 
-  // Member management handlers
+  // Members Handlers
   const handleAddMember = (newUser: User) => {
     setUsers(prev => [...prev, newUser]);
+    logActivity(`Yangi guruh a'zosi qo'shildi: "${newUser.username}" (${newUser.role})`);
     setNotifications(prev => [
-      { id: `N-${Date.now()}`, message: `Yangi a'zo "${newUser.firstName}" (${newUser.role}) qo'shildi.`, read: false, time: 'Hozir' },
+      { id: `N-${Date.now()}`, message: `Yangi a'zo qo'shildi: ${newUser.firstName} (${newUser.role})`, read: false, time: 'Hozir' },
       ...prev
     ]);
   };
@@ -282,11 +281,15 @@ export default function App() {
 
   const handleDeleteMember = (userId: string) => {
     setUsers(prev => prev.filter(u => u.id !== userId));
+    logActivity(`A'zo o'chirildi (ID: ${userId})`);
   };
 
   // Chat Handlers
   const handleSendMessage = (msg: ChatMessage) => {
-    setChats(prev => [...prev, msg]);
+    setChats(prev => {
+      if (prev.some(m => m.id === msg.id)) return prev;
+      return [...prev, msg];
+    });
   };
 
   const handleEditMessage = (msgId: string, newText: string) => {
@@ -300,6 +303,7 @@ export default function App() {
   // Project Handlers
   const handleAddProject = (proj: Project) => {
     setProjects(prev => [...prev, proj]);
+    logActivity(`Yangi loyiha yaratildi: "${proj.name}"`);
   };
 
   const handleUpdateProject = (updatedProj: Project) => {
@@ -313,6 +317,7 @@ export default function App() {
   // Task Handlers
   const handleAddTask = (newTask: Task) => {
     setTasks(prev => [newTask, ...prev]);
+    logActivity(`Yangi vazifa belgilandi: "${newTask.title}"`);
   };
 
   const handleUpdateTask = (updatedTask: Task) => {
@@ -321,8 +326,10 @@ export default function App() {
 
   const handleToggleTask = (taskId: string, currentUserId: string) => {
     setTasks(prev => prev.map(t => {
-      if (t.id === taskId && t.assignedToId === currentUserId) {
-        return { ...t, completed: !t.completed };
+      if (t.id === taskId) {
+        const next = !t.completed;
+        if (next) logActivity(`"${t.title}" vazifasini bajardi`);
+        return { ...t, completed: next };
       }
       return t;
     }));
@@ -343,41 +350,6 @@ export default function App() {
 
   const handleDeleteNote = (id: string) => {
     setNotes(prev => prev.filter(n => n.id !== id));
-  };
-
-  // Version Plan Handler
-  const handleSavePlan = (plan: VersionPlan) => {
-    setVersionPlans(prev => {
-      const idx = prev.findIndex(p => p.projectId === plan.projectId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = plan;
-        return copy;
-      }
-      return [...prev, plan];
-    });
-  };
-
-  // Test Report Handler
-  const handleAddReport = (report: TestReport) => {
-    setTestReports(prev => [report, ...prev]);
-  };
-
-  const handleDeleteReport = (reportId: string) => {
-    setTestReports(prev => prev.filter(r => r.id !== reportId));
-  };
-
-  // Architecture Doc Handler
-  const handleSaveArchitecture = (doc: ArchitectureDoc) => {
-    setArchitectureDocs(prev => {
-      const idx = prev.findIndex(a => a.projectId === doc.projectId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = doc;
-        return copy;
-      }
-      return [...prev, doc];
-    });
   };
 
   // Reminder Handlers
@@ -401,7 +373,18 @@ export default function App() {
     setReminders(prev => prev.filter(r => r.id !== id));
   };
 
-  // If no logged in user, render LandingPage login card
+  // Restore backup
+  const handleRestoreBackup = (data: any) => {
+    if (data.users) setUsers(data.users);
+    if (data.orders) setOrders(data.orders);
+    if (data.projects) setProjects(data.projects);
+    if (data.tasks) setTasks(data.tasks);
+    if (data.notes) setNotes(data.notes);
+    if (data.siteSettings) setSiteSettings(data.siteSettings);
+    logActivity("Zaxira nusxasi (Backup) tiklandi");
+  };
+
+  // If no user is logged in, show Saytlab-style high-converting Landing Page
   if (!currentUser) {
     return (
       <LandingPage 
@@ -412,11 +395,24 @@ export default function App() {
     );
   }
 
+  // Custom Background Check for Creator
+  const isCreator = currentUser.role === 'creator';
+  const showMatrixRain = isCreator && siteSettings.creatorBackgroundType === 'matrix';
+  const customBgStyle = isCreator && siteSettings.creatorBackgroundType === 'custom_image' && siteSettings.creatorBackgroundImage
+    ? { backgroundImage: `url(${siteSettings.creatorBackgroundImage})`, backgroundSize: 'cover', backgroundAttachment: 'fixed', backgroundPosition: 'center' }
+    : undefined;
+
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors ${
-      darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
-    }`}>
+    <div 
+      style={customBgStyle}
+      className={`min-h-screen flex flex-col font-sans transition-colors relative ${
+        darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+      }`}
+    >
       
+      {/* Optional Matrix Digital Rain for Creator */}
+      {showMatrixRain && <MatrixRain opacity={0.25} color="#10b981" />}
+
       {/* Top Header */}
       <Header 
         user={currentUser}
@@ -430,7 +426,7 @@ export default function App() {
       />
 
       {/* Main Layout */}
-      <div className="flex-grow flex overflow-hidden relative">
+      <div className="flex-grow flex overflow-hidden relative z-10">
         
         {/* Navigation Sidebar */}
         <Sidebar 
@@ -451,11 +447,42 @@ export default function App() {
               user={currentUser}
               notifications={notifications}
               reminders={reminders}
+              orders={orders}
+              projects={projects}
+              tasks={tasks}
+              siteSettings={siteSettings}
               onAddReminder={handleAddReminder}
               onToggleReminder={handleToggleReminder}
               onDeleteReminder={handleDeleteReminder}
               onNavigateMenu={setActiveMenu}
               darkMode={darkMode}
+              language={currentUser.language}
+            />
+          )}
+
+          {activeMenu === 'Mijoz Buyurtmalari' && (
+            <OrdersManagementView 
+              orders={orders}
+              allUsers={users}
+              currentUser={currentUser}
+              onUpdateOrder={handleUpdateOrder}
+              darkMode={darkMode}
+              language={currentUser.language}
+            />
+          )}
+
+          {activeMenu === 'A\'zolar' && (
+            <MembersView 
+              currentUser={currentUser}
+              allUsers={users}
+              activities={activities}
+              tasks={tasks}
+              orders={orders}
+              onAddMember={handleAddMember}
+              onUpdateMember={handleUpdateMember}
+              onDeleteMember={handleDeleteMember}
+              darkMode={darkMode}
+              language={currentUser.language}
             />
           )}
 
@@ -468,61 +495,17 @@ export default function App() {
               onEditMessage={handleEditMessage}
               onDeleteMessage={handleDeleteMessage}
               darkMode={darkMode}
+              language={currentUser.language}
             />
           )}
 
-          {(activeMenu === 'Buyurtma berish' || activeMenu === 'Buyurtmalar') && (
+          {activeMenu === 'Buyurtma berish' && (
             <OrderView 
               currentUser={currentUser}
               orders={orders}
               onSubmitOrder={handleAddOrder}
               darkMode={darkMode}
               language={currentUser.language}
-            />
-          )}
-
-          {activeMenu === 'Creator Panel' && (
-            <CreatorPanel 
-              currentUser={currentUser}
-              allUsers={users}
-              projects={projects}
-              tasks={tasks}
-              testReports={testReports}
-              notes={notes}
-              orders={orders}
-              siteSettings={siteSettings}
-              onUpdateSiteSettings={setSiteSettings}
-              onAddMember={handleAddMember}
-              onUpdateMember={handleUpdateMember}
-              onDeleteMember={handleDeleteMember}
-              onUpdateOrder={handleUpdateOrder}
-              onSwitchUser={(user) => setCurrentUser(user)}
-              onNavigateMenu={(menu) => setActiveMenu(menu)}
-              darkMode={darkMode}
-            />
-          )}
-
-          {activeMenu === 'Aqlli qidiruv' && (
-            <ResearcherPanel 
-              currentUser={currentUser}
-              darkMode={darkMode}
-            />
-          )}
-
-          {activeMenu === 'A\'zo qo\'shish' && (
-            <EngineerPanel 
-              currentUser={currentUser}
-              allUsers={users}
-              projects={projects}
-              architectureDocs={architectureDocs}
-              onAddMember={handleAddMember}
-              onUpdateMember={handleUpdateMember}
-              onDeleteMember={handleDeleteMember}
-              onAddProject={handleAddProject}
-              onUpdateProject={handleUpdateProject}
-              onDeleteProject={handleDeleteProject}
-              activeTab="addMember"
-              darkMode={darkMode}
             />
           )}
 
@@ -539,16 +522,6 @@ export default function App() {
               onUpdateProject={handleUpdateProject}
               onDeleteProject={handleDeleteProject}
               activeTab="projects"
-              darkMode={darkMode}
-            />
-          )}
-
-          {activeMenu === 'Loyiha arxitekturasi' && (
-            <DesignerPanel 
-              currentUser={currentUser}
-              projects={projects}
-              architectureDocs={architectureDocs}
-              onSaveArchitecture={handleSaveArchitecture}
               darkMode={darkMode}
             />
           )}
@@ -577,27 +550,6 @@ export default function App() {
             />
           )}
 
-          {activeMenu === 'Versiyalash & Rejalash' && (
-            <VersionPlanningView 
-              currentUser={currentUser}
-              projects={projects}
-              versionPlans={versionPlans}
-              onSavePlan={handleSavePlan}
-              darkMode={darkMode}
-            />
-          )}
-
-          {activeMenu === 'Test Natijalari' && (
-            <TestReportsView 
-              currentUser={currentUser}
-              projects={projects}
-              testReports={testReports}
-              onAddReport={handleAddReport}
-              onDeleteReport={handleDeleteReport}
-              darkMode={darkMode}
-            />
-          )}
-
           {(activeMenu === 'Profile' || activeMenu === 'Profil') && (
             <ProfileView 
               user={currentUser}
@@ -614,6 +566,53 @@ export default function App() {
               onLanguageChange={handleLanguageChange}
               darkMode={darkMode}
               onToggleDarkMode={() => setDarkMode(!darkMode)}
+              siteSettings={siteSettings}
+              onUpdateSiteSettings={setSiteSettings}
+              allUsers={users}
+              orders={orders}
+              projects={projects}
+              tasks={tasks}
+              notes={notes}
+              onRestoreBackup={handleRestoreBackup}
+            />
+          )}
+
+          {/* Specialist role views */}
+          {activeMenu === 'Aqlli qidiruv' && (
+            <ResearcherPanel 
+              currentUser={currentUser}
+              darkMode={darkMode}
+            />
+          )}
+
+          {activeMenu === 'Loyiha arxitekturasi' && (
+            <DesignerPanel 
+              currentUser={currentUser}
+              projects={projects}
+              architectureDocs={architectureDocs}
+              onSaveArchitecture={() => {}}
+              darkMode={darkMode}
+            />
+          )}
+
+          {activeMenu === 'Test Natijalari' && (
+            <TestReportsView 
+              currentUser={currentUser}
+              projects={projects}
+              testReports={testReports}
+              onAddReport={() => {}}
+              onDeleteReport={() => {}}
+              darkMode={darkMode}
+            />
+          )}
+
+          {activeMenu === 'Versiyalash & Rejalash' && (
+            <VersionPlanningView 
+              currentUser={currentUser}
+              projects={projects}
+              versionPlans={versionPlans}
+              onSavePlan={() => {}}
+              darkMode={darkMode}
             />
           )}
         </main>
