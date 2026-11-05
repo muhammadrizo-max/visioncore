@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   User, Project, ChatMessage, Task, NoteItem, VersionPlan, 
-  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, Language, SiteSettings 
+  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, Language, SiteSettings, Order 
 } from './types';
 import { 
   INITIAL_USERS, INITIAL_PROJECTS, INITIAL_CHATS, INITIAL_TASKS, 
   INITIAL_NOTES, INITIAL_VERSION_PLANS, INITIAL_TEST_REPORTS, 
-  INITIAL_ARCHITECTURE_DOCS, INITIAL_REMINDERS, INITIAL_SITE_SETTINGS 
+  INITIAL_ARCHITECTURE_DOCS, INITIAL_REMINDERS, INITIAL_SITE_SETTINGS, INITIAL_ORDERS 
 } from './mockData';
 
 import { LandingPage } from './components/LandingPage';
@@ -22,6 +22,7 @@ import { ResearcherPanel } from './components/ResearcherPanel';
 import { EngineerPanel } from './components/EngineerPanel';
 import { DesignerPanel } from './components/DesignerPanel';
 import { CreatorPanel } from './components/CreatorPanel';
+import { OrderView } from './components/OrderView';
 import { ProfileView } from './components/ProfileView';
 import { SettingsView } from './components/SettingsView';
 
@@ -53,7 +54,7 @@ export default function App() {
             const exists = prev.some(u => u && u.username && u.username.toLowerCase() === data.engineerUsername.toLowerCase());
             if (!exists) {
               const engUser: User = {
-                id: 'VCG-ENG-001',
+                id: 'vcg-88192014',
                 username: data.engineerUsername,
                 password: data.engineerPassword,
                 firstName: 'Bosh Muhandis',
@@ -85,7 +86,6 @@ export default function App() {
     const saved = localStorage.getItem('visioncore_users') || localStorage.getItem('cipher_v4_users');
     const parsed: User[] = saved ? JSON.parse(saved) : [];
     
-    // Always merge INITIAL_USERS so default engineer accounts exist
     const merged = [...parsed];
     for (const initUser of INITIAL_USERS) {
       if (!merged.some(u => u && u.username && typeof u.username === 'string' && u.username.toLowerCase() === initUser.username.toLowerCase())) {
@@ -93,6 +93,12 @@ export default function App() {
       }
     }
     return merged.length > 0 ? merged : INITIAL_USERS;
+  });
+
+  // Client Orders
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem('visioncore_orders');
+    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
   });
 
   // Projects
@@ -151,53 +157,49 @@ export default function App() {
 
   // Notifications
   const [notifications, setNotifications] = useState<NotificationItem[]>([
-    { id: 'N1', message: 'VisionCore Group Workspace xavfsiz seansida ish boshladingiz.', read: false, time: 'Hozir' },
-    { id: 'N2', message: 'Tizimda real-time muloqot va fayllar uzatish faol.', read: false, time: '10m oldin' }
+    { id: 'N1', message: 'VisionCore Group Workspace tizimiga muvaffaqiyatli kirdingiz.', read: false, time: 'Hozir' },
+    { id: 'N2', message: 'Dasturiy ta\'minot va bot buyurtmalari uchun "Buyurtma berish" bo\'limi faol.', read: false, time: '5m oldin' }
   ]);
 
-  // Active Menu & Sidebar State
+  // Active Menu & Sidebar State (Opens by default, collapses when shield / < is clicked)
   const [activeMenu, setActiveMenu] = useState<string>('Bosh sahifa');
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
   // Persistence Effects
   useEffect(() => {
     localStorage.setItem('visioncore_users', JSON.stringify(users));
-    localStorage.setItem('cipher_v4_users', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
+    localStorage.setItem('visioncore_orders', JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
     localStorage.setItem('visioncore_chats', JSON.stringify(chats));
-    localStorage.setItem('cipher_v4_chats', JSON.stringify(chats));
   }, [chats]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_tasks', JSON.stringify(tasks));
-    localStorage.setItem('cipher_v4_tasks', JSON.stringify(tasks));
   }, [tasks]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_notes', JSON.stringify(notes));
-    localStorage.setItem('cipher_v4_notes', JSON.stringify(notes));
   }, [notes]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_version_plans', JSON.stringify(versionPlans));
-    localStorage.setItem('cipher_v4_version_plans', JSON.stringify(versionPlans));
   }, [versionPlans]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_test_reports', JSON.stringify(testReports));
-    localStorage.setItem('cipher_v4_test_reports', JSON.stringify(testReports));
   }, [testReports]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_architecture_docs', JSON.stringify(architectureDocs));
-    localStorage.setItem('cipher_v4_architecture_docs', JSON.stringify(architectureDocs));
   }, [architectureDocs]);
 
   useEffect(() => {
     localStorage.setItem('visioncore_reminders', JSON.stringify(reminders));
-    localStorage.setItem('cipher_v4_reminders', JSON.stringify(reminders));
   }, [reminders]);
 
   useEffect(() => {
@@ -207,33 +209,10 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('visioncore_current_user', JSON.stringify(currentUser));
-      localStorage.setItem('cipher_v4_current_user', JSON.stringify(currentUser));
     } else {
       localStorage.removeItem('visioncore_current_user');
-      localStorage.removeItem('cipher_v4_current_user');
     }
   }, [currentUser]);
-
-  // Storage listener for instant cross-tab real-time sync
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (!e.newValue) return;
-      try {
-        if (e.key === 'visioncore_chats' || e.key === 'cipher_v4_chats') setChats(JSON.parse(e.newValue));
-        if (e.key === 'visioncore_users' || e.key === 'cipher_v4_users') setUsers(JSON.parse(e.newValue));
-        if (e.key === 'visioncore_tasks' || e.key === 'cipher_v4_tasks') setTasks(JSON.parse(e.newValue));
-        if (e.key === 'visioncore_notes' || e.key === 'cipher_v4_notes') setNotes(JSON.parse(e.newValue));
-        if (e.key === 'visioncore_version_plans' || e.key === 'cipher_v4_version_plans') setVersionPlans(JSON.parse(e.newValue));
-        if (e.key === 'visioncore_test_reports' || e.key === 'cipher_v4_test_reports') setTestReports(JSON.parse(e.newValue));
-        if (e.key === 'visioncore_architecture_docs' || e.key === 'cipher_v4_architecture_docs') setArchitectureDocs(JSON.parse(e.newValue));
-        if (e.key === 'visioncore_reminders' || e.key === 'cipher_v4_reminders') setReminders(JSON.parse(e.newValue));
-      } catch (err) {
-        console.error("Storage sync error:", err);
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
 
   // Login Handler
   const handleLoginSuccess = (user: User) => {
@@ -260,6 +239,29 @@ export default function App() {
     const updated = { ...currentUser, avatar: newAvatarUrl };
     setCurrentUser(updated);
     setUsers(users.map(u => u.id === updated.id ? updated : u));
+  };
+
+  // User Profile update handler
+  const handleUpdateUser = (updatedUser: User) => {
+    setCurrentUser(updatedUser);
+    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+    setNotifications(prev => [
+      { id: `N-${Date.now()}`, message: 'Profil ma\'lumotlaringiz yangilandi.', read: false, time: 'Hozir' },
+      ...prev
+    ]);
+  };
+
+  // Order Handlers
+  const handleAddOrder = (newOrder: Order) => {
+    setOrders(prev => [newOrder, ...prev]);
+    setNotifications(prev => [
+      { id: `N-${Date.now()}`, message: `Yangi buyurtma qabul qilindi: "${newOrder.projectName}" (${newOrder.projectType})`, read: false, time: 'Hozir' },
+      ...prev
+    ]);
+  };
+
+  const handleUpdateOrder = (updatedOrder: Order) => {
+    setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
   };
 
   // Member management handlers
@@ -412,7 +414,7 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors ${
-      darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
+      darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
     }`}>
       
       {/* Top Header */}
@@ -421,9 +423,10 @@ export default function App() {
         activeMenu={activeMenu}
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
-        onLogout={handleLogout}
         onLanguageChange={handleLanguageChange}
+        isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onNavigateMenu={setActiveMenu}
       />
 
       {/* Main Layout */}
@@ -438,6 +441,7 @@ export default function App() {
           darkMode={darkMode}
           isOpen={isSidebarOpen}
           onCloseMobile={() => setIsSidebarOpen(false)}
+          language={currentUser.language}
         />
 
         {/* Content Body View */}
@@ -467,6 +471,16 @@ export default function App() {
             />
           )}
 
+          {(activeMenu === 'Buyurtma berish' || activeMenu === 'Buyurtmalar') && (
+            <OrderView 
+              currentUser={currentUser}
+              orders={orders}
+              onSubmitOrder={handleAddOrder}
+              darkMode={darkMode}
+              language={currentUser.language}
+            />
+          )}
+
           {activeMenu === 'Creator Panel' && (
             <CreatorPanel 
               currentUser={currentUser}
@@ -475,11 +489,13 @@ export default function App() {
               tasks={tasks}
               testReports={testReports}
               notes={notes}
+              orders={orders}
               siteSettings={siteSettings}
               onUpdateSiteSettings={setSiteSettings}
               onAddMember={handleAddMember}
               onUpdateMember={handleUpdateMember}
               onDeleteMember={handleDeleteMember}
+              onUpdateOrder={handleUpdateOrder}
               onSwitchUser={(user) => setCurrentUser(user)}
               onNavigateMenu={(menu) => setActiveMenu(menu)}
               darkMode={darkMode}
@@ -582,11 +598,13 @@ export default function App() {
             />
           )}
 
-          {activeMenu === 'Profile' && (
+          {(activeMenu === 'Profile' || activeMenu === 'Profil') && (
             <ProfileView 
               user={currentUser}
+              onUpdateUser={handleUpdateUser}
               onUpdateAvatar={handleUpdateAvatar}
               darkMode={darkMode}
+              language={currentUser.language}
             />
           )}
 

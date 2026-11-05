@@ -9,17 +9,51 @@ export type RoleType =
 export type Language = 'uz' | 'en' | 'ru';
 
 export interface User {
-  id: string; // e.g. VCG-10001
-  username: string; // e.g. vcg-admin
-  password?: string; // e.g. vcg_admin2026
+  id: string; // 12 characters: e.g. vcg-84920193 or vcg_84920193
+  username: string; // e.g. vcg-creator, sardor99
+  password?: string;
   firstName: string;
   lastName: string;
   phone: string;
   email: string;
+  telegramUsername?: string; // e.g. @sardor_dev
   role: RoleType;
   avatar: string;
   registeredAt: string;
   language?: Language;
+}
+
+export type ProjectType = 
+  | 'telegram_bot'
+  | 'web_app'
+  | 'website'
+  | 'mobile_app'
+  | 'crm'
+  | 'landing_page'
+  | 'other';
+
+export type OrderStatus = 
+  | 'pending'
+  | 'in_review'
+  | 'accepted'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export interface Order {
+  id: string;
+  userId: string;
+  clientName: string;
+  clientPhone: string;
+  clientTelegram: string;
+  projectType: ProjectType;
+  projectName: string;
+  description: string;
+  budget?: string;
+  deadline?: string;
+  status: OrderStatus;
+  createdAt: string;
+  adminNotes?: string;
 }
 
 export interface Task {
@@ -80,7 +114,7 @@ export interface ArchitectureDoc {
     id: string;
     type: 'text' | 'image' | 'file' | 'template';
     title: string;
-    content: string; // image url, template type, or text
+    content: string;
     x?: number;
     y?: number;
   }[];
@@ -102,7 +136,7 @@ export interface ChatMessage {
   senderRole: string;
   text: string;
   timestamp: string;
-  chatId: string; // 'group-all' or sorted user-to-user ID pair
+  chatId: string;
   attachmentUrl?: string;
   isEdited?: boolean;
 }
