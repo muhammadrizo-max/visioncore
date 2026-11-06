@@ -3,10 +3,10 @@ import {
   TestReport, ArchitectureDoc, ReminderPlan, LogMessage, SiteSettings, Order, MemberActivity 
 } from './types';
 
-// Keep essential accounts so the creator and admin can immediately log in
+// Only the master Creator account is retained so the owner can log in
 export const INITIAL_USERS: User[] = [
   {
-    id: 'vcg-90000001', // Exactly 12 characters
+    id: 'vcg-90000001',
     username: 'vcg-creator',
     password: 'vcg_mcc2ro',
     firstName: 'Boshliq',
@@ -18,54 +18,21 @@ export const INITIAL_USERS: User[] = [
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
     registeredAt: new Date().toISOString(),
     language: 'uz'
-  },
-  {
-    id: 'vcg-90000002',
-    username: 'vcg-admin',
-    password: 'vcg_mcc2ro',
-    firstName: 'Bosh Muhandis',
-    lastName: '(Admin)',
-    phone: '+998 90 000 00 00',
-    email: 'admin@visioncore.group',
-    telegramUsername: '@visioncore_admin',
-    role: 'engineer',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-    language: 'uz'
   }
 ];
 
-// Clean mock data - real entries will be created by the team
+// Clean - Zero dummy orders, projects, tasks, notes, or dummy activities
 export const INITIAL_ORDERS: Order[] = [];
-
 export const INITIAL_PROJECTS: Project[] = [];
-
 export const INITIAL_TASKS: Task[] = [];
-
 export const INITIAL_NOTES: NoteItem[] = [];
-
 export const INITIAL_VERSION_PLANS: VersionPlan[] = [];
-
 export const INITIAL_TEST_REPORTS: TestReport[] = [];
-
 export const INITIAL_ARCHITECTURE_DOCS: ArchitectureDoc[] = [];
-
 export const INITIAL_CHATS: ChatMessage[] = [];
-
 export const INITIAL_REMINDERS: ReminderPlan[] = [];
-
 export const INITIAL_LOGS: LogMessage[] = [];
-
-export const INITIAL_ACTIVITIES: MemberActivity[] = [
-  {
-    id: 'ACT-1',
-    userId: 'vcg-90000001',
-    userName: 'Boshliq (Creator)',
-    userRole: 'creator',
-    action: 'Tizim ishga tushirildi va sozlamalar yangilandi',
-    timestamp: new Date().toISOString()
-  }
-];
+export const INITIAL_ACTIVITIES: MemberActivity[] = [];
 
 export const INITIAL_SITE_SETTINGS: SiteSettings = {
   siteName: 'VisionCore Group',
@@ -77,6 +44,9 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   creatorBackgroundImage: '',
   heroTitle: 'Zamonaviy IT Loyihalar va Dasturiy Yechimlar Markazi',
   heroSubtitle: 'Biznesingiz uchun professional Telegram botlar, Web ilovalar, CRM tizimlari va yuqori tezlikdagi veb-saytlar yaratamiz.',
+  portfolioMarqueeEnabled: true,
+  supabaseUrl: '',
+  supabaseAnonKey: '',
   services: [
     {
       id: 'srv-1',
@@ -136,11 +106,11 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   portfolio: [
     {
       id: 'port-1',
-      title: 'FastDelivery Logistika Platformasi',
+      title: 'FastDelivery Express Logistika',
       category: 'Web App & Bot',
       image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600',
-      description: 'Kuryerlar uchun ilova, restoranlar uchun boshqaruv paneli va mijozlar boti.',
-      tags: ['React', 'Node.js', 'Telegram API', 'PostgreSQL']
+      description: 'Kuryerlar, restoranlar va mijozlar uchun avtomatlashtirilgan 3 tomonlama yetkazib berish tizimi.',
+      tags: ['React', 'Node.js', 'PostgreSQL', 'Telegram API']
     },
     {
       id: 'port-2',
@@ -157,6 +127,46 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
       image: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&q=80&w=600',
       description: 'Interaktiv 3D xarita, filtrlar va onlayn bron qilish tizimi bilan jihozlangan sayt.',
       tags: ['Next.js', 'Tailwind', 'SEO', 'Mobile Friendly']
+    },
+    {
+      id: 'port-4',
+      title: 'EduSmart Onlayn Ta\'lim Platformasi',
+      category: 'Web App & LMS',
+      image: 'https://images.unsplash.com/photo-1501504905252-473c47e087f8?auto=format&fit=crop&q=80&w=600',
+      description: 'Video darslar, avtomatik test sinovlari va sertifikat beruvchi zamonaviy LMS tizimi.',
+      tags: ['React', 'Express', 'Video Stream', 'PostgreSQL']
+    },
+    {
+      id: 'port-5',
+      title: 'PaySwift To\'lov & Billing Boti',
+      category: 'Telegram Bot',
+      image: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&q=80&w=600',
+      description: 'Click va Payme orqali bir soniyada hisob to\'ldirish va obuna boshqarish boti.',
+      tags: ['Node.js', 'Click API', 'Payme API', 'Redis']
+    },
+    {
+      id: 'port-6',
+      title: 'AutoClean Avtomoyka Boshqaruv Tizimi',
+      category: 'CRM & POS',
+      image: 'https://images.unsplash.com/photo-1520340356584-f9917d1eea6f?auto=format&fit=crop&q=80&w=600',
+      description: 'Navbat nazorati, xodimlar maoshi hisob-kitobi va SMS xabarnomalar integratsiyasi.',
+      tags: ['Vue.js', 'Tailwind', 'SMS Gateway']
+    },
+    {
+      id: 'port-7',
+      title: 'PharmaCore Dorixonalar Tarmog\'i',
+      category: 'Web App & CRM',
+      image: 'https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&q=80&w=600',
+      description: 'Dori vositalari qoldig\'i, muddati va filiallararo avtomatik yuk taqsimoti tizimi.',
+      tags: ['React', 'Supabase', 'Barcode Scan']
+    },
+    {
+      id: 'port-8',
+      title: 'GourmetResto Smart Restoran Menyu',
+      category: 'Web App & QR',
+      image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=600',
+      description: 'QR kod orqali interaktiv menyu, ofitsiant chaqirish va to\'lov qilish tizimi.',
+      tags: ['React', 'Tailwind', 'WebSockets']
     }
   ]
 };

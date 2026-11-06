@@ -138,6 +138,7 @@ export interface ChatMessage {
   senderId: string;
   senderName: string;
   senderRole: string;
+  senderAvatar?: string;
   text: string;
   timestamp: string;
   chatId: string;
@@ -202,6 +203,9 @@ export interface SiteSettings {
   creatorBackgroundImage?: string;
   heroTitle?: string;
   heroSubtitle?: string;
+  portfolioMarqueeEnabled?: boolean;
+  supabaseUrl?: string;
+  supabaseAnonKey?: string;
   services?: ServiceItem[];
   portfolio?: PortfolioItem[];
 }

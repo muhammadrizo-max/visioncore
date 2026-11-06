@@ -30,10 +30,11 @@ import { MatrixRain } from './components/MatrixRain';
 
 export default function App() {
   
-  // Clean old mock data on first load to provide real clean slate
+  // Clean all default mock data on first load to provide real clean slate (Point 3)
   useEffect(() => {
-    const isCleaned = localStorage.getItem('visioncore_clean_v3');
+    const isCleaned = localStorage.getItem('visioncore_clean_v5_wiped');
     if (!isCleaned) {
+      localStorage.removeItem('visioncore_users');
       localStorage.removeItem('visioncore_tasks');
       localStorage.removeItem('visioncore_projects');
       localStorage.removeItem('visioncore_test_reports');
@@ -41,7 +42,10 @@ export default function App() {
       localStorage.removeItem('visioncore_architecture_docs');
       localStorage.removeItem('visioncore_orders');
       localStorage.removeItem('visioncore_notes');
-      localStorage.setItem('visioncore_clean_v3', 'true');
+      localStorage.removeItem('visioncore_chats');
+      localStorage.removeItem('visioncore_reminders');
+      localStorage.removeItem('visioncore_activities');
+      localStorage.setItem('visioncore_clean_v5_wiped', 'true');
     }
   }, []);
 
@@ -66,77 +70,99 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  // All Team Members List
+  // All Team Members List (Only single master creator initially)
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('visioncore_users');
-    const parsed: User[] = saved ? JSON.parse(saved) : [];
-    const merged = [...parsed];
-    for (const initUser of INITIAL_USERS) {
-      if (!merged.some(u => u && u.username && u.username.toLowerCase() === initUser.username.toLowerCase())) {
-        merged.unshift(initUser);
-      }
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_users');
+      return INITIAL_USERS;
     }
-    return merged.length > 0 ? merged : INITIAL_USERS;
+    const saved = localStorage.getItem('visioncore_users');
+    return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
-  // Client Orders
+  // Client Orders (Empty)
   const [orders, setOrders] = useState<Order[]>(() => {
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_orders');
+      return [];
+    }
     const saved = localStorage.getItem('visioncore_orders');
-    return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // Projects
+  // Projects (Empty)
   const [projects, setProjects] = useState<Project[]>(() => {
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_projects');
+      return [];
+    }
     const saved = localStorage.getItem('visioncore_projects');
-    return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // Chats
+  // Chats (Empty)
   const [chats, setChats] = useState<ChatMessage[]>(() => {
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_chats');
+      return [];
+    }
     const saved = localStorage.getItem('visioncore_chats');
-    return saved ? JSON.parse(saved) : INITIAL_CHATS;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // Tasks
+  // Tasks (Empty)
   const [tasks, setTasks] = useState<Task[]>(() => {
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_tasks');
+      return [];
+    }
     const saved = localStorage.getItem('visioncore_tasks');
-    return saved ? JSON.parse(saved) : INITIAL_TASKS;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // Notes
+  // Notes (Empty)
   const [notes, setNotes] = useState<NoteItem[]>(() => {
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_notes');
+      return [];
+    }
     const saved = localStorage.getItem('visioncore_notes');
-    return saved ? JSON.parse(saved) : INITIAL_NOTES;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // Version Plans
+  // Version Plans (Empty)
   const [versionPlans, setVersionPlans] = useState<VersionPlan[]>(() => {
-    const saved = localStorage.getItem('visioncore_version_plans');
-    return saved ? JSON.parse(saved) : INITIAL_VERSION_PLANS;
+    return [];
   });
 
-  // Test Reports
+  // Test Reports (Empty)
   const [testReports, setTestReports] = useState<TestReport[]>(() => {
-    const saved = localStorage.getItem('visioncore_test_reports');
-    return saved ? JSON.parse(saved) : INITIAL_TEST_REPORTS;
+    return [];
   });
 
-  // Architecture Docs
+  // Architecture Docs (Empty)
   const [architectureDocs, setArchitectureDocs] = useState<ArchitectureDoc[]>(() => {
-    const saved = localStorage.getItem('visioncore_architecture_docs');
-    return saved ? JSON.parse(saved) : INITIAL_ARCHITECTURE_DOCS;
+    return [];
   });
 
-  // Reminders
+  // Reminders (Empty)
   const [reminders, setReminders] = useState<ReminderPlan[]>(() => {
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_reminders');
+      return [];
+    }
     const saved = localStorage.getItem('visioncore_reminders');
-    return saved ? JSON.parse(saved) : INITIAL_REMINDERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
-  // Member Activities
+  // Member Activities (Empty)
   const [activities, setActivities] = useState<MemberActivity[]>(() => {
+    if (localStorage.getItem('visioncore_clean_v5_wiped') !== 'true') {
+      localStorage.removeItem('visioncore_activities');
+      return [];
+    }
     const saved = localStorage.getItem('visioncore_activities');
-    return saved ? JSON.parse(saved) : INITIAL_ACTIVITIES;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Site Settings
@@ -391,6 +417,7 @@ export default function App() {
         allUsers={users}
         onLoginSuccess={handleLoginSuccess}
         language="uz"
+        siteSettings={siteSettings}
       />
     );
   }
@@ -405,13 +432,13 @@ export default function App() {
   return (
     <div 
       style={customBgStyle}
-      className={`min-h-screen flex flex-col font-sans transition-colors relative ${
+      className={`h-screen max-h-screen overflow-hidden flex flex-col font-sans transition-colors relative ${
         darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
       }`}
     >
       
-      {/* Optional Matrix Digital Rain for Creator */}
-      {showMatrixRain && <MatrixRain opacity={0.25} color="#10b981" />}
+      {/* Optional Matrix Digital Rain for Creator (vivid crisp glowing green) */}
+      {showMatrixRain && <MatrixRain opacity={0.70} color="#22c55e" />}
 
       {/* Top Header */}
       <Header 
@@ -425,8 +452,8 @@ export default function App() {
         onNavigateMenu={setActiveMenu}
       />
 
-      {/* Main Layout */}
-      <div className="flex-grow flex overflow-hidden relative z-10">
+      {/* Main Layout Container (Pinned sidebar on left, independent scroll on right) */}
+      <div className="flex-1 flex overflow-hidden relative z-10 min-h-0">
         
         {/* Navigation Sidebar */}
         <Sidebar 
@@ -440,8 +467,8 @@ export default function App() {
           language={currentUser.language}
         />
 
-        {/* Content Body View */}
-        <main className="flex-grow overflow-y-auto">
+        {/* Content Body View (Scrolls independently while Sidebar remains pinned) */}
+        <main className="flex-1 overflow-y-auto min-h-0">
           {activeMenu === 'Bosh sahifa' && (
             <UserDashboard 
               user={currentUser}

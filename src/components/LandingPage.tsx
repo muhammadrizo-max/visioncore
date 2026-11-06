@@ -21,20 +21,24 @@ import {
   ExternalLink,
   Code2
 } from 'lucide-react';
-import { User, Language, ProjectType } from '../types';
+import { User, Language, ProjectType, SiteSettings } from '../types';
 import { getTranslation } from '../lib/translations';
 import { generateVcgUserId } from '../lib/idGenerator';
+import { PortfolioShowcase } from './PortfolioShowcase';
+import { INITIAL_SITE_SETTINGS } from '../mockData';
 
 interface LandingPageProps {
   allUsers: User[];
   onLoginSuccess: (user: User) => void;
   language?: Language;
+  siteSettings?: SiteSettings;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   allUsers,
   onLoginSuccess,
-  language = 'uz'
+  language = 'uz',
+  siteSettings = INITIAL_SITE_SETTINGS
 }) => {
   const [currentLang, setCurrentLang] = useState<Language>(language);
   const t = getTranslation(currentLang);
@@ -365,54 +369,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 4. PORTFOLIO SHOWCASE (Qilingan ishlar) */}
-      <section className="py-16 px-4 sm:px-8 max-w-7xl mx-auto space-y-10 border-t border-slate-800">
-        <div className="text-center space-y-3">
-          <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-            Bizning Qilingan Ishlarimiz (Portfolio)
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
-            VisionCore Group jamoasi tomonidan muvaffaqiyatli topshirilgan loyihalar
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {portfolio.map((item) => (
-            <div 
-              key={item.title}
-              className="rounded-3xl bg-slate-900 border border-slate-800 overflow-hidden shadow-lg group hover:border-blue-500/40 transition"
-            >
-              <div className="relative overflow-hidden h-44">
-                <img 
-                  src={item.image} 
-                  alt={item.title} 
-                  className="w-full h-full object-cover group-hover:scale-105 transition duration-500" 
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
-                <span className="absolute bottom-3 left-3 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-blue-600 text-white uppercase tracking-wider">
-                  {item.cat}
-                </span>
-              </div>
-
-              <div className="p-5 space-y-2">
-                <h3 className="text-sm font-bold text-white group-hover:text-blue-400 transition line-clamp-1">
-                  {item.title}
-                </h3>
-                <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">
-                  {item.desc}
-                </p>
-                <div className="flex flex-wrap gap-1.5 pt-2">
-                  {item.tags.map(tag => (
-                    <span key={tag} className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* 4. PORTFOLIO SHOWCASE (Qilingan ishlar - 2-row counter-rotating marquee) */}
+      <section className="py-16 px-4 sm:px-8 max-w-7xl mx-auto border-t border-slate-800">
+        <PortfolioShowcase
+          portfolio={siteSettings?.portfolio && siteSettings.portfolio.length > 0 ? siteSettings.portfolio : INITIAL_SITE_SETTINGS.portfolio || []}
+          marqueeEnabled={siteSettings?.portfolioMarqueeEnabled !== undefined ? siteSettings.portfolioMarqueeEnabled : true}
+          darkMode={true}
+          language={currentLang}
+        />
       </section>
+
 
       {/* 5. FOOTER */}
       <footer className="border-t border-slate-800 py-10 px-4 sm:px-8 text-center text-xs text-slate-500 space-y-3">

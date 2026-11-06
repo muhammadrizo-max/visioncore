@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { User, NotificationItem, ReminderPlan, Order, Project, Task, Language, SiteSettings } from '../types';
 import { getTranslation } from '../lib/translations';
+import { PortfolioShowcase } from './PortfolioShowcase';
 
 interface UserDashboardProps {
   user: User;
@@ -459,48 +460,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </div>
           </div>
 
-          {/* Portfolio Section (Saytlab style done projects) */}
-          <div className="space-y-3 pt-2">
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                {t.ourPortfolio}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {t.ourPortfolioDesc}
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {(siteSettings.portfolio || []).map((port) => (
-                <div
-                  key={port.id}
-                  className={`rounded-3xl border overflow-hidden shadow-sm transition hover:shadow-md ${
-                    darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-                  }`}
-                >
-                  <img src={port.image} alt={port.title} className="w-full h-36 object-cover" />
-                  <div className="p-4 space-y-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500">
-                      {port.category}
-                    </span>
-                    <h3 className="text-xs font-bold text-slate-900 dark:text-white line-clamp-1">
-                      {port.title}
-                    </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">
-                      {port.description}
-                    </p>
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {port.tags.map(tag => (
-                        <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono">
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {/* Portfolio Section (Saytlab style 2-row counter-rotating marquee) */}
+          <div className="pt-2">
+            <PortfolioShowcase
+              portfolio={siteSettings.portfolio || []}
+              marqueeEnabled={siteSettings.portfolioMarqueeEnabled !== undefined ? siteSettings.portfolioMarqueeEnabled : true}
+              darkMode={darkMode}
+              language={currentLang}
+            />
           </div>
+
 
         </div>
       )}

@@ -111,9 +111,10 @@ export const TRANSLATIONS = {
     directCall: 'Qo\'ng\'iroq qilish',
     openTelegram: 'Telegramda yozish',
     allStatuses: 'Barcha statuslar',
-    filterByStatus: 'Status bo\'yicha saralash',
     onlyAssignedCanComplete: 'Faqatgina biriktirilgan a\'zo bajarildi deb belgilashi mumkin',
-    createdBy: 'Yaratuvchi'
+    createdBy: 'Yaratuvchi',
+    languageAndTheme: 'Til va Mavzu Sozlamalari',
+    noMessages: 'Hozircha xabarlar yo\'q'
   },
   en: {
     appName: 'VisionCore Group',
@@ -225,7 +226,9 @@ export const TRANSLATIONS = {
     allStatuses: 'All Statuses',
     filterByStatus: 'Filter by Status',
     onlyAssignedCanComplete: 'Only the assigned member can mark this completed',
-    createdBy: 'Created by'
+    createdBy: 'Created by',
+    languageAndTheme: 'Language and Appearance',
+    noMessages: 'No messages yet'
   },
   ru: {
     appName: 'VisionCore Group',
@@ -337,7 +340,9 @@ export const TRANSLATIONS = {
     allStatuses: 'Все статусы',
     filterByStatus: 'Фильтр по статусу',
     onlyAssignedCanComplete: 'Только назначенный участник может отметить задачу выполненной',
-    createdBy: 'Создатель'
+    createdBy: 'Создатель',
+    languageAndTheme: 'Настройки Языка и Темы',
+    noMessages: 'Сообщений пока нет'
   }
 };
 

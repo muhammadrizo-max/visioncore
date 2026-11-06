@@ -6,8 +6,8 @@ interface MatrixRainProps {
 }
 
 export const MatrixRain: React.FC<MatrixRainProps> = ({ 
-  opacity = 0.22,
-  color = '#10b981' // emerald cyber green
+  opacity = 0.75,
+  color = '#22c55e' // Bright vivid cyber emerald green
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -30,9 +30,9 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
 
     window.addEventListener('resize', handleResize);
 
-    // Characters for digital stream: binary, numbers and VCG
-    const chars = '0123456789VCG0101100101101';
-    const fontSize = 14;
+    // Characters for digital stream: binary, digits, and VCG
+    const chars = '0123456789VCG010110010110189012345';
+    const fontSize = 15;
     const columns = Math.floor(width / fontSize);
     const drops: number[] = [];
 
@@ -41,7 +41,7 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
     }
 
     let lastTime = 0;
-    const interval = 45; // ~22 fps for authentic retro feel and ultra low CPU
+    const interval = 40; // ~25 fps for smooth, authentic crisp stream
 
     const draw = (time: number) => {
       animationFrameId = requestAnimationFrame(draw);
@@ -49,19 +49,32 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
       if (time - lastTime < interval) return;
       lastTime = time;
 
-      // Subtle fade effect
-      ctx.fillStyle = 'rgba(2, 6, 23, 0.12)';
+      // Crisp subtle fade effect for readable trails
+      ctx.fillStyle = 'rgba(5, 5, 5, 0.08)';
       ctx.fillRect(0, 0, width, height);
 
-      ctx.fillStyle = color;
-      ctx.font = `${fontSize}px monospace`;
+      ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
 
       for (let i = 0; i < drops.length; i++) {
         const text = chars.charAt(Math.floor(Math.random() * chars.length));
         const x = i * fontSize;
         const y = drops[i] * fontSize;
 
+        // Vivid leading head of the stream glows white
+        if (Math.random() > 0.85) {
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#4ade80';
+          ctx.shadowBlur = 10;
+        } else {
+          ctx.fillStyle = color;
+          ctx.shadowColor = '#22c55e';
+          ctx.shadowBlur = 4;
+        }
+
         ctx.fillText(text, x, y);
+
+        // Reset shadow
+        ctx.shadowBlur = 0;
 
         if (y > height && Math.random() > 0.975) {
           drops[i] = 0;
