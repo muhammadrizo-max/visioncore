@@ -73,11 +73,9 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
       </div>
 
       {/* Record New Test Form */}
-      <div className={`p-6 rounded-3xl border ${
-        darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-      } shadow-sm space-y-4`}>
+      <div className="p-6 rounded-3xl liquid-glass shadow-sm space-y-4">
         
-        <h2 className="text-sm font-bold flex items-center space-x-2 text-teal-500">
+        <h2 className="text-sm font-bold flex items-center space-x-2 text-teal-600 dark:text-teal-400">
           <Plus className="w-4 h-4" />
           <span>Yangi test hisobotini qayd etish</span>
         </h2>
@@ -87,12 +85,12 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
             
             {/* 1. Select Project */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-400">Loyihani tanlang</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Loyihani tanlang</label>
               <select
                 id="test-project-select"
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-teal-500"
+                className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/40 text-slate-900 dark:text-white"
               >
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -104,7 +102,7 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
 
             {/* 2. Test Nomi / Turi */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-400">Test Nomi / Turi</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Test Nomi / Turi</label>
               <input 
                 id="test-name-input"
                 type="text"
@@ -112,18 +110,18 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
                 placeholder="Masalan: WebSocket sync test..."
                 value={testName}
                 onChange={(e) => setTestName(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-teal-500"
+                className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/40 text-slate-900 dark:text-white"
               />
             </div>
 
             {/* 3. Natija Dropdown */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-400">Test Natijasi</label>
+              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Test Natijasi</label>
               <select
                 id="test-result-select"
                 value={result}
                 onChange={(e) => setResult(e.target.value as 'Success' | 'Failed')}
-                className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:border-teal-500"
+                className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-bold focus:outline-none focus:ring-2 focus:ring-teal-500/40 text-slate-900 dark:text-white"
               >
                 <option value="Success">Success (Muvaffaqiyatli)</option>
                 <option value="Failed">Failed (Muvaffaqiyatsiz / Xato bor)</option>
@@ -144,7 +142,7 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
                 
                 {/* Xato Sarlavhasi */}
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Xato Sarlavhasi</label>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Xato Sarlavhasi</label>
                   <input 
                     id="test-errortitle-input"
                     type="text"
@@ -152,18 +150,18 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
                     placeholder="Masalan: Token muddati o'tib ketganda xatolik berdi"
                     value={errorTitle}
                     onChange={(e) => setErrorTitle(e.target.value)}
-                    className="w-full px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs focus:outline-none focus:border-red-500"
+                    className="w-full px-4 py-2 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-red-500/40 text-slate-900 dark:text-white"
                   />
                 </div>
 
                 {/* Xavflilik Darajasi */}
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">Xavflilik Darajasi (Severity)</label>
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Xavflilik Darajasi (Severity)</label>
                   <select
                     id="test-severity-select"
                     value={severity}
                     onChange={(e) => setSeverity(e.target.value as 'Low' | 'Medium' | 'High')}
-                    className="w-full px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold focus:outline-none focus:border-red-500"
+                    className="w-full px-4 py-2 rounded-xl liquid-glass-subtle text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500/40 text-slate-900 dark:text-white"
                   >
                     <option value="Low">Low (Past - Ko'k rang)</option>
                     <option value="Medium">Medium (O'rta - Sariq rang)</option>
@@ -175,14 +173,14 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
 
               {/* Xatolik Tavsifi */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">Xatolik Tavsifi</label>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Xatolik Tavsifi</label>
                 <textarea
                   id="test-errordesc-textarea"
                   rows={2}
                   placeholder="Xatolik qanday yuz berdi va qanday takrorlandi..."
                   value={errorDesc}
                   onChange={(e) => setErrorDesc(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs focus:outline-none focus:border-red-500 resize-none"
+                  className="w-full px-4 py-2 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-red-500/40 resize-none text-slate-900 dark:text-white"
                 />
               </div>
             </div>
@@ -190,14 +188,14 @@ export const TestReportsView: React.FC<TestReportsViewProps> = ({
 
           {/* Test Notes */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400">Test Eslatmalari (Notes)</label>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Test Eslatmalari (Notes)</label>
             <textarea
               id="test-notes-textarea"
               rows={2}
               placeholder="Test qanday va nimalar bajarilganligi haqida xulosa..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-teal-500 resize-none"
+              className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-teal-500/40 resize-none text-slate-900 dark:text-white"
             />
           </div>
 

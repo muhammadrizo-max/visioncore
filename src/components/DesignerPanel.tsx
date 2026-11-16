@@ -153,7 +153,7 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
             id="designer-project-select"
             value={selectedProjectId}
             onChange={(e) => handleProjectSelect(e.target.value)}
-            className="px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-purple-500 focus:outline-none"
+            className="px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-bold text-purple-600 dark:text-purple-400 focus:outline-none"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -179,13 +179,11 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
         
         {/* Left / Center: Interactive Board ("Doska") */}
         <div className="lg:col-span-2 space-y-4">
-          <div className={`p-6 rounded-3xl border ${
-            darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          } shadow-sm space-y-4`}>
+          <div className="p-6 rounded-3xl liquid-glass shadow-sm space-y-4">
             
             {/* Board Controls */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4 border-slate-200 dark:border-slate-800">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4 border-slate-200/40 dark:border-white/10">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Arxitektura Doskasi
               </h2>
 
@@ -200,7 +198,7 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
                 <button
                   id="designer-upload-file-btn"
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center space-x-1"
+                  className="px-3 py-1.5 rounded-xl liquid-glass-subtle text-xs font-bold hover:opacity-80 transition flex items-center space-x-1"
                 >
                   <Image className="w-3.5 h-3.5" />
                   <span>Rasm/Fayl yuklash</span>
@@ -210,7 +208,7 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
                   <select
                     value={templateType}
                     onChange={(e) => setTemplateType(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-semibold focus:outline-none"
+                    className="px-3 py-1.5 rounded-xl liquid-glass-subtle text-xs font-semibold focus:outline-none"
                   >
                     <option value="Button & Controls">Button & Controls</option>
                     <option value="Sidebar UI">Sidebar UI</option>
@@ -232,7 +230,7 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
             </div>
 
             {/* Board Canvas Display */}
-            <div className="min-h-[350px] p-6 rounded-2xl bg-slate-950/40 border border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="min-h-[350px] p-6 rounded-2xl liquid-glass-subtle grid grid-cols-1 sm:grid-cols-2 gap-4">
               {boardItems.length === 0 ? (
                 <div className="col-span-full h-full flex flex-col items-center justify-center text-slate-500 text-xs py-12">
                   <Layout className="w-8 h-8 text-purple-500/40 mb-2" />
@@ -242,10 +240,10 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
                 boardItems.map((item) => (
                   <div 
                     key={item.id}
-                    className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700 flex flex-col justify-between space-y-2 relative"
+                    className="p-4 rounded-2xl liquid-glass flex flex-col justify-between space-y-2 relative"
                   >
                     <div className="flex items-start justify-between">
-                      <span className="text-xs font-bold text-purple-400">{item.title}</span>
+                      <span className="text-xs font-bold text-purple-500 dark:text-purple-400">{item.title}</span>
                       <button 
                         onClick={() => handleRemoveItem(item.id)}
                         className="text-slate-400 hover:text-red-500 p-1"
@@ -257,7 +255,7 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
                     {item.type === 'image' ? (
                       <img src={item.content} alt={item.title} className="max-h-40 rounded-xl object-cover" />
                     ) : (
-                      <p className="text-[11px] text-slate-300 leading-relaxed">{item.content}</p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{item.content}</p>
                     )}
                   </div>
                 ))
@@ -268,11 +266,9 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
         </div>
 
         {/* Right Side: Description & Specifications Text Editor */}
-        <div className={`p-6 rounded-3xl border ${
-          darkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
-        } shadow-sm space-y-4`}>
+        <div className="p-6 rounded-3xl liquid-glass text-slate-900 dark:text-white shadow-sm space-y-4">
           
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-2">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center space-x-2">
             <FileText className="w-4 h-4 text-purple-500" />
             <span>Loyiha Tavsifi va Ishlashi</span>
           </h2>
@@ -282,7 +278,7 @@ export const DesignerPanel: React.FC<DesignerPanelProps> = ({
             rows={14}
             value={specsText}
             onChange={(e) => setSpecsText(e.target.value)}
-            className="w-full p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-purple-500 leading-relaxed resize-none font-mono"
+            className="w-full p-4 rounded-2xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-purple-500/40 leading-relaxed resize-none font-mono text-slate-900 dark:text-white"
             placeholder="Loyiha ishlashi va arxitekturasi haqida batafsil..."
           />
 

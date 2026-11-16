@@ -3,11 +3,13 @@ import React, { useEffect, useRef } from 'react';
 interface MatrixRainProps {
   opacity?: number;
   color?: string;
+  darkMode?: boolean;
 }
 
 export const MatrixRain: React.FC<MatrixRainProps> = ({ 
-  opacity = 0.75,
-  color = '#22c55e' // Bright vivid cyber emerald green
+  opacity = 0.78,
+  color = '#22c55e',
+  darkMode = true
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -30,7 +32,6 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
 
     window.addEventListener('resize', handleResize);
 
-    // Characters for digital stream: binary, digits, and VCG
     const chars = '0123456789VCG010110010110189012345';
     const fontSize = 15;
     const columns = Math.floor(width / fontSize);
@@ -41,7 +42,7 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
     }
 
     let lastTime = 0;
-    const interval = 40; // ~25 fps for smooth, authentic crisp stream
+    const interval = 40;
 
     const draw = (time: number) => {
       animationFrameId = requestAnimationFrame(draw);
@@ -49,8 +50,8 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
       if (time - lastTime < interval) return;
       lastTime = time;
 
-      // Crisp subtle fade effect for readable trails
-      ctx.fillStyle = 'rgba(5, 5, 5, 0.08)';
+      // Adapt trail fade to dark or light mode
+      ctx.fillStyle = darkMode ? 'rgba(5, 5, 5, 0.08)' : 'rgba(241, 245, 249, 0.14)';
       ctx.fillRect(0, 0, width, height);
 
       ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
@@ -60,20 +61,17 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
         const x = i * fontSize;
         const y = drops[i] * fontSize;
 
-        // Vivid leading head of the stream glows white
         if (Math.random() > 0.85) {
-          ctx.fillStyle = '#ffffff';
-          ctx.shadowColor = '#4ade80';
-          ctx.shadowBlur = 10;
+          ctx.fillStyle = darkMode ? '#ffffff' : '#0f172a';
+          ctx.shadowColor = darkMode ? '#4ade80' : '#10b981';
+          ctx.shadowBlur = darkMode ? 10 : 4;
         } else {
-          ctx.fillStyle = color;
-          ctx.shadowColor = '#22c55e';
-          ctx.shadowBlur = 4;
+          ctx.fillStyle = darkMode ? color : '#059669';
+          ctx.shadowColor = darkMode ? '#22c55e' : '#34d399';
+          ctx.shadowBlur = darkMode ? 4 : 2;
         }
 
         ctx.fillText(text, x, y);
-
-        // Reset shadow
         ctx.shadowBlur = 0;
 
         if (y > height && Math.random() > 0.975) {
@@ -90,7 +88,7 @@ export const MatrixRain: React.FC<MatrixRainProps> = ({
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [color]);
+  }, [color, darkMode]);
 
   return (
     <canvas

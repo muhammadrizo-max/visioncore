@@ -1,27 +1,22 @@
 import React, { useState } from 'react';
-import { Play, Pause, ExternalLink, Sparkles, Layers } from 'lucide-react';
-import { PortfolioItem, Language } from '../types';
-import { getTranslation } from '../lib/translations';
+import { Play, Pause, ExternalLink, Sparkles } from 'lucide-react';
+import { PortfolioItem } from '../types';
 
 interface PortfolioShowcaseProps {
   portfolio: PortfolioItem[];
   marqueeEnabled?: boolean;
   onToggleMarquee?: () => void;
   darkMode?: boolean;
-  language?: Language;
 }
 
 export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
   portfolio,
   marqueeEnabled = true,
   onToggleMarquee,
-  darkMode = true,
-  language = 'uz'
+  darkMode = true
 }) => {
-  const t = getTranslation((language as Language) || 'uz');
   const [localMarquee, setLocalMarquee] = useState(marqueeEnabled);
 
-  // Sync if prop changes
   const isMarqueeActive = onToggleMarquee ? marqueeEnabled : localMarquee;
   const toggleHandler = () => {
     if (onToggleMarquee) {
@@ -31,29 +26,18 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
     }
   };
 
-  // If portfolio is empty or small, fallback gracefully
   const items = portfolio && portfolio.length > 0 ? portfolio : [];
-
-  // Split into 2 rows for the 2-row counter-rotating marquee
-  // Row 1: even indices, Row 2: odd indices (or first half / second half)
-  const half = Math.ceil(items.length / 2);
   const row1Items = items.filter((_, idx) => idx % 2 === 0);
   const row2Items = items.filter((_, idx) => idx % 2 !== 0);
 
-  // Duplicate each row for continuous seamless looping
   const duplicatedRow1 = [...row1Items, ...row1Items, ...row1Items];
   const duplicatedRow2 = [...row2Items, ...row2Items, ...row2Items];
 
   const renderCard = (item: PortfolioItem, keySuffix: string | number) => (
     <div
       key={`${item.id}-${keySuffix}`}
-      className={`flex-shrink-0 w-[290px] sm:w-[320px] rounded-3xl border overflow-hidden shadow-lg transition-all duration-300 group hover:shadow-2xl hover:scale-[1.01] ${
-        darkMode 
-          ? 'bg-slate-900/90 border-slate-800 hover:border-blue-500/50' 
-          : 'bg-white border-slate-200 hover:border-blue-400'
-      }`}
+      className="flex-shrink-0 w-[290px] sm:w-[320px] rounded-3xl liquid-glass overflow-hidden transition-all duration-300 group hover:border-blue-500/50 hover:scale-[1.01]"
     >
-      {/* Thumbnail */}
       <div className="relative h-40 sm:h-44 w-full overflow-hidden bg-slate-950">
         <img
           src={item.image}
@@ -78,7 +62,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
         )}
       </div>
 
-      {/* Content */}
       <div className="p-4 sm:p-5 space-y-2.5">
         <h3 className={`text-sm font-bold line-clamp-1 transition group-hover:text-blue-500 ${
           darkMode ? 'text-white' : 'text-slate-900'
@@ -91,16 +74,11 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
           {item.description}
         </p>
         
-        {/* Tech tags */}
         <div className="flex flex-wrap gap-1.5 pt-1">
           {(item.tags || []).slice(0, 4).map((tag, i) => (
             <span
               key={i}
-              className={`text-[10px] font-mono px-2 py-0.5 rounded-md font-medium ${
-                darkMode
-                  ? 'bg-slate-800 text-slate-300 border border-slate-700/50'
-                  : 'bg-slate-100 text-slate-700 border border-slate-200'
-              }`}
+              className="text-[10px] font-mono px-2 py-0.5 rounded-md font-medium liquid-glass-subtle text-slate-700 dark:text-slate-300"
             >
               {tag}
             </span>
@@ -112,8 +90,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
 
   return (
     <div className="space-y-6">
-      
-      {/* Header and Marquee ON/OFF Toggle Switch */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center space-x-1.5 text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">
@@ -123,16 +99,15 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
           <h2 className={`text-xl sm:text-2xl font-black tracking-tight ${
             darkMode ? 'text-white' : 'text-slate-900'
           }`}>
-            {t.ourPortfolio}
+            Bizning Qilgan Ishlarimiz
           </h2>
           <p className={`text-xs sm:text-sm ${
             darkMode ? 'text-slate-400' : 'text-slate-600'
           }`}>
-            {t.ourPortfolioDesc}
+            VisionCore Group jamoasi tomonidan yaratilgan haqiqiy va zamonaviy dasturiy loyihalar
           </p>
         </div>
 
-        {/* Continuous Marquee On / Off Toggle Switch */}
         <div className="flex items-center space-x-3">
           <button
             type="button"
@@ -140,9 +115,7 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
             className={`px-4 py-2 rounded-2xl border text-xs font-bold transition flex items-center space-x-2 shadow-sm cursor-pointer ${
               isMarqueeActive
                 ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/20'
-                : darkMode
-                  ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-750'
-                  : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                : 'liquid-glass-subtle text-slate-700 dark:text-slate-300'
             }`}
           >
             {isMarqueeActive ? (
@@ -160,18 +133,14 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
         </div>
       </div>
 
-      {/* 2-Row Counter-Rotating Display */}
       {isMarqueeActive ? (
         <div className="space-y-4 overflow-hidden py-2 select-none">
-          
-          {/* Row 1: Scrolling Left-to-Right */}
           <div className="relative w-full overflow-hidden">
             <div className="animate-marquee-right flex gap-4">
               {duplicatedRow1.map((item, idx) => renderCard(item, `r1-${idx}`))}
             </div>
           </div>
 
-          {/* Row 2: Scrolling in the Opposite Direction (Right-to-Left) */}
           <div className="relative w-full overflow-hidden">
             <div className="animate-marquee-left flex gap-4">
               {duplicatedRow2.map((item, idx) => renderCard(item, `r2-${idx}`))}
@@ -179,14 +148,12 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
           </div>
 
           <div className="text-center pt-1">
-            <span className={`text-[11px] font-medium tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+            <span className={`text-[11px] font-medium tracking-wide ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>
               (Kursorni loyiha ustiga olib borsangiz harakat to'xtaydi)
             </span>
           </div>
-
         </div>
       ) : (
-        /* Static Grid Mode: 2 Rows x 4 Columns */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 pt-2">
           {items.map((item, idx) => (
             <div key={item.id} className="w-full">
@@ -195,7 +162,6 @@ export const PortfolioShowcase: React.FC<PortfolioShowcaseProps> = ({
           ))}
         </div>
       )}
-
     </div>
   );
 };

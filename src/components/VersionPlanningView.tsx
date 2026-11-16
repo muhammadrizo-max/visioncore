@@ -109,12 +109,12 @@ export const VersionPlanningView: React.FC<VersionPlanningViewProps> = ({
 
         {/* Select Project Dropdown */}
         <div className="w-full md:w-72">
-          <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Loyihani Tanlang</label>
+          <label className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 block mb-1">Loyihani Tanlang</label>
           <select
             id="version-project-select"
             value={selectedProjectId}
             onChange={(e) => handleProjectChange(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:border-indigo-500"
+            className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40 text-slate-900 dark:text-white"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -132,35 +132,33 @@ export const VersionPlanningView: React.FC<VersionPlanningViewProps> = ({
       )}
 
       {/* Main Form Box */}
-      <div className={`p-8 rounded-3xl border ${
-        darkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
-      } shadow-sm space-y-6`}>
+      <div className="p-8 rounded-3xl liquid-glass text-slate-900 dark:text-white shadow-sm space-y-6">
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Versiya raqami */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400">Versiya Raqami</label>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Versiya Raqami</label>
             <input 
               id="version-number-input"
               type="text"
               placeholder="Masalan: v1.2.0"
               value={version}
               onChange={(e) => setVersion(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:border-indigo-500"
+              className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
             />
           </div>
 
           {/* Versiya / Bosqich nomi */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-400">Bosqich / Versiya Nomi</label>
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Bosqich / Versiya Nomi</label>
             <input 
               id="version-name-input"
               type="text"
               placeholder="Masalan: MVP Release & Refactoring..."
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:border-indigo-500"
+              className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
             />
           </div>
 
@@ -168,27 +166,27 @@ export const VersionPlanningView: React.FC<VersionPlanningViewProps> = ({
 
         {/* Versiya tavsifi */}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-400">Versiya Tavsifi</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Versiya Tavsifi</label>
           <textarea
             id="version-desc-textarea"
             rows={3}
             placeholder="Ushbu versiyada amalga oshirilgan va yangilangan o'zgarishlar..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-indigo-500 resize-none"
+            className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
           />
         </div>
 
         {/* Keyingi qadam */}
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-slate-400">Keyingi Qadam (Next Steps)</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Keyingi Qadam (Next Steps)</label>
           <input 
             id="version-nextstep-input"
             type="text"
             placeholder="Keyingi ishlab chiqish rejasi..."
             value={nextStep}
             onChange={(e) => setNextStep(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
+            className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
           />
         </div>
 
@@ -225,7 +223,7 @@ export const VersionPlanningView: React.FC<VersionPlanningViewProps> = ({
               placeholder="Texnologiya nomi (Masalan: Python, D3, Redis)..."
               value={techInput}
               onChange={(e) => setTechInput(e.target.value)}
-              className="flex-grow px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:outline-none focus:border-indigo-500"
+              className="flex-grow px-4 py-2 rounded-xl liquid-glass-subtle text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
             />
             <button
               id="version-add-tech-btn"

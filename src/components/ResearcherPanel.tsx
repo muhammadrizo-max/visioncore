@@ -105,7 +105,7 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
             id="researcher-engine-select"
             value={selectedEngine}
             onChange={(e) => setSelectedEngine(e.target.value as SearchEngine)}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-blue-500 focus:outline-none"
+            className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle border border-white/20 dark:border-white/10 text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none"
           >
             <option value="all">🚀 Barcha 5 Qidiruv Tizimi (All)</option>
             <option value="tavily">🌐 Tavily (tavily.com)</option>
@@ -124,9 +124,7 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
         <div className="lg:col-span-3 space-y-4">
           
           {/* Query Form */}
-          <form onSubmit={handleSearchSubmit} className={`p-4 rounded-3xl border ${
-            darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-          } shadow-sm space-y-3`}>
+          <form onSubmit={handleSearchSubmit} className="p-4 rounded-3xl liquid-glass shadow-sm space-y-3">
             
             <div className="flex items-center space-x-3">
               <input 
@@ -140,7 +138,7 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
                 id="researcher-file-upload-btn"
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition flex-shrink-0"
+                className="p-3 rounded-2xl liquid-glass-subtle hover:opacity-80 text-slate-500 transition flex-shrink-0"
                 title="Qurilmadan fayl yuklash"
               >
                 <Paperclip className="w-5 h-5" />
@@ -152,7 +150,7 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
                 placeholder="Savol yoki qidirmoqchi bo'lgan narsani yozing..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="flex-grow px-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border-transparent focus:outline-none focus:border-blue-500 text-xs"
+                className="flex-grow px-4 py-3 rounded-2xl liquid-glass-subtle focus:outline-none focus:ring-2 focus:ring-blue-500/40 text-xs text-slate-900 dark:text-white"
               />
 
               <button
@@ -176,22 +174,18 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
 
           {/* Results list */}
           {searchResults.length === 0 ? (
-            <div className={`p-8 rounded-3xl border text-center ${
-              darkMode ? 'bg-slate-900 border-slate-800 text-slate-500' : 'bg-white border-slate-200 text-slate-400'
-            }`}>
+            <div className="p-8 rounded-3xl liquid-glass text-center text-slate-500 dark:text-slate-400">
               <Bot className="w-10 h-10 mx-auto text-blue-500/50 mb-3" />
-              <p className="text-xs font-medium">Hozircha qidiruv o'tkazilmadi. Savol berib Python backend orqali jonli natijalarni ko'ring.</p>
+              <p className="text-xs font-medium">Hozircha qidiruv o'tkazilmadi. Savol berib backend orqali jonli natijalarni ko'ring.</p>
             </div>
           ) : (
             <div className="space-y-4">
               {searchResults.map((item) => (
                 <div 
                   key={item.id}
-                  className={`p-6 rounded-3xl border ${
-                    darkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
-                  } shadow-sm space-y-3`}
+                  className="p-6 rounded-3xl liquid-glass text-slate-900 dark:text-white shadow-sm space-y-3"
                 >
-                  <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between border-b pb-3 border-slate-200/40 dark:border-white/10">
                     <div className="flex items-center space-x-2">
                       <Globe className="w-4 h-4 text-blue-500" />
                       <span className="text-xs font-bold text-blue-500 uppercase">{item.engine} Search Engine</span>
@@ -199,9 +193,9 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
                     <span className="text-[10px] text-slate-400">{item.timestamp}</span>
                   </div>
 
-                  <h3 className="text-sm font-bold text-indigo-400">"{item.query}"</h3>
+                  <h3 className="text-sm font-bold text-indigo-500 dark:text-indigo-400">"{item.query}"</h3>
                   
-                  <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap bg-slate-800/40 p-4 rounded-2xl border border-slate-800 font-sans">
+                  <div className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap liquid-glass-subtle p-4 rounded-2xl font-sans">
                     {item.response}
                   </div>
 
@@ -219,35 +213,33 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
         </div>
 
         {/* API Engine Info Panel */}
-        <div className={`p-6 rounded-3xl border ${
-          darkMode ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-800'
-        } shadow-sm space-y-4 h-fit`}>
+        <div className="p-6 rounded-3xl liquid-glass text-slate-900 dark:text-white shadow-sm space-y-4 h-fit">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Faol API Servislar</h2>
           
           <div className="space-y-2.5 text-xs">
-            <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 space-y-1">
-              <span className="font-bold text-blue-400 block">🌐 Tavily (tavily.com)</span>
-              <p className="text-[11px] text-slate-400">TAVILY_API_KEY bilan chuqur veb qidiruv.</p>
+            <div className="p-3 rounded-2xl liquid-glass-subtle space-y-1">
+              <span className="font-bold text-blue-500 dark:text-blue-400 block">🌐 Tavily (tavily.com)</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">TAVILY_API_KEY bilan chuqur veb qidiruv.</p>
             </div>
 
-            <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 space-y-1">
-              <span className="font-bold text-amber-400 block">🔍 SerpAPI (serpapi.com)</span>
-              <p className="text-[11px] text-slate-400">SERPAPI_API_KEY orqali Google natijalari.</p>
+            <div className="p-3 rounded-2xl liquid-glass-subtle space-y-1">
+              <span className="font-bold text-amber-500 dark:text-amber-400 block">🔍 SerpAPI (serpapi.com)</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">SERPAPI_API_KEY orqali Google natijalari.</p>
             </div>
 
-            <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 space-y-1">
-              <span className="font-bold text-indigo-400 block">✨ Gemini (ai.google.dev)</span>
-              <p className="text-[11px] text-slate-400">GEMINI_API_KEY orqali mantiqiy AI xulosa.</p>
+            <div className="p-3 rounded-2xl liquid-glass-subtle space-y-1">
+              <span className="font-bold text-indigo-500 dark:text-indigo-400 block">✨ Gemini (ai.google.dev)</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">GEMINI_API_KEY orqali mantiqiy AI xulosa.</p>
             </div>
 
-            <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 space-y-1">
-              <span className="font-bold text-purple-400 block">⚡ Exa (exa.ai)</span>
-              <p className="text-[11px] text-slate-400">EXA_API_KEY orqali neyron veb qidiruvi.</p>
+            <div className="p-3 rounded-2xl liquid-glass-subtle space-y-1">
+              <span className="font-bold text-purple-500 dark:text-purple-400 block">⚡ Exa (exa.ai)</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">EXA_API_KEY orqali neyron veb qidiruvi.</p>
             </div>
 
-            <div className="p-3 rounded-2xl bg-slate-800/50 border border-slate-700/60 space-y-1">
-              <span className="font-bold text-red-400 block">🔥 Firecrawl (firecrawl.dev)</span>
-              <p className="text-[11px] text-slate-400">FIRECRAWL_API_KEY bilan veb skreyping.</p>
+            <div className="p-3 rounded-2xl liquid-glass-subtle space-y-1">
+              <span className="font-bold text-red-500 dark:text-red-400 block">🔥 Firecrawl (firecrawl.dev)</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">FIRECRAWL_API_KEY bilan veb skreyping.</p>
             </div>
           </div>
         </div>
