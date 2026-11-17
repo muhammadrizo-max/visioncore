@@ -19,7 +19,9 @@ import {
   Globe, 
   Smartphone, 
   Briefcase, 
-  ChevronRight
+  ChevronRight,
+  Megaphone,
+  Check
 } from 'lucide-react';
 import { User, ReminderPlan, Order, Project, Task, MemberActivity, SiteSettings } from '../types';
 import { PortfolioShowcase } from './PortfolioShowcase';
@@ -33,11 +35,11 @@ interface UserDashboardProps {
   tasks: Task[];
   activities: MemberActivity[];
   siteSettings: SiteSettings;
-  supabaseConnected?: boolean;
   onAddReminder: (title: string, date: string) => void;
   onToggleReminder: (id: string) => void;
   onDeleteReminder: (id: string) => void;
   onNavigateMenu: (menu: string) => void;
+  onMarkBroadcastRead?: (broadcastId: string) => void;
   darkMode: boolean;
 }
 
@@ -50,17 +52,28 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   tasks,
   activities,
   siteSettings,
-  supabaseConnected = false,
   onAddReminder,
   onToggleReminder,
   onDeleteReminder,
   onNavigateMenu,
+  onMarkBroadcastRead,
   darkMode
 }) => {
   const [newReminderTitle, setNewReminderTitle] = useState('');
 
-  const isCreatorOrAdmin = user.role === 'creator' || user.role === 'engineer';
+  const isCreator = user.role === 'creator';
+  const isTeamMember = user.role !== 'user' && user.role !== 'creator';
   const completedTasksCount = tasks.filter(t => t.completed).length;
+
+  const unreadBroadcasts = (siteSettings.broadcasts || []).filter((bc) => {
+    if (isCreator) return false;
+    if ((bc.readByUserIds || []).includes(user.id)) return false;
+    if (bc.targetType === 'all') return true;
+    if (bc.targetType === 'members' && isTeamMember) return true;
+    if (bc.targetType === 'users' && user.role === 'user') return true;
+    if (bc.targetType === 'single' && bc.targetUserId === user.id) return true;
+    return false;
+  });
 
   const handleCreateReminder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +153,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {isCreatorOrAdmin ? (
+            {isCreator || isTeamMember ? (
               <button
                 onClick={() => onNavigateMenu('Mijoz Buyurtmalari')}
                 className="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs sm:text-sm transition flex items-center space-x-2 shadow-lg active:scale-95 cursor-pointer"
@@ -162,8 +175,51 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       </div>
 
-      {/* 2. CREATOR EXECUTIVE DASHBOARD (100% Real Data + Liquid Glass Cards) */}
-      {isCreatorOrAdmin && (
+      {/* UNREAD CREATOR BROADCASTS BANNER */}
+      {unreadBroadcasts.length > 0 && (
+        <div className="space-y-3">
+          {unreadBroadcasts.map((bc) => (
+            <div
+              key={bc.id}
+              className="p-4 sm:p-5 rounded-3xl liquid-glass border border-blue-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in"
+            >
+              <div className="flex items-start space-x-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-500 flex items-center justify-center flex-shrink-0">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-600 text-white">
+                      Creator Xabari
+                    </span>
+                    <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">{bc.title}</h3>
+                  </div>
+                  <p className="text-xs text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                    {bc.message}
+                  </p>
+                  {bc.imageUrl && (
+                    <img src={bc.imageUrl} alt={bc.title} className="mt-2 max-h-40 rounded-xl object-cover border border-white/10" />
+                  )}
+                </div>
+              </div>
+
+              {onMarkBroadcastRead && (
+                <button
+                  type="button"
+                  onClick={() => onMarkBroadcastRead(bc.id)}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center space-x-1.5 self-start sm:self-center flex-shrink-0 cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>O'qildi</span>
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 2. CREATOR EXECUTIVE DASHBOARD (Strictly Creator Only) */}
+      {isCreator && (
         <div className="space-y-6">
           
           {/* Real KPI Cards */}
@@ -197,13 +253,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
             <div className="p-5 rounded-3xl liquid-glass">
               <div className="flex items-center justify-between text-purple-500">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Foydalanuvchilar</span>
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Jamoa & Userlar</span>
                 <Users className="w-5 h-5" />
               </div>
               <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{allUsers.length} ta</div>
-              <span className={`text-[10px] font-bold flex items-center space-x-1 ${supabaseConnected ? 'text-emerald-500' : 'text-amber-500'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${supabaseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                <span>{supabaseConnected ? 'Supabase Real-Time Ulangan' : 'Supabase Sozlanmagan'}</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
+                {allUsers.filter(u => u.role !== 'user').length} ta a'zo • {allUsers.filter(u => u.role === 'user').length} ta user
               </span>
             </div>
           </div>
@@ -377,12 +432,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
             </button>
 
             <button
-              onClick={() => onNavigateMenu('Sozlamalar')}
+              onClick={() => onNavigateMenu('Broadcast')}
               className="p-4 rounded-2xl liquid-glass text-left flex items-center justify-between transition cursor-pointer active:scale-98 hover:border-purple-500/50"
             >
               <div className="space-y-0.5">
-                <span className="text-xs font-bold text-slate-900 dark:text-white block">Zaxiralash & Supabase</span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">Backup, DB holati va fonni sozlash</span>
+                <span className="text-xs font-bold text-slate-900 dark:text-white block">Broadcast & Xabarlar</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">Barchaga yoki bitta odamga xabar tarqatish</span>
               </div>
               <ArrowRight className="w-4 h-4 text-purple-500" />
             </button>
@@ -391,8 +446,46 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
         </div>
       )}
 
+      {/* 2B. TEAM MEMBER ORDERS SUMMARY (Equally visible to Engineer, Researcher, Designer, Analyst) */}
+      {isTeamMember && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <button
+            onClick={() => onNavigateMenu('Mijoz Buyurtmalari')}
+            className="p-5 rounded-3xl liquid-glass text-left flex items-center justify-between hover:border-blue-500/40 transition cursor-pointer"
+          >
+            <div>
+              <span className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">Umumiy Buyurtmalar</span>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">{orders.length} ta</div>
+              <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">{pendingOrders} ta yangi kutilmoqda</span>
+            </div>
+            <ShoppingBag className="w-7 h-7 text-blue-500" />
+          </button>
+
+          <div className="p-5 rounded-3xl liquid-glass flex items-center justify-between">
+            <div>
+              <span className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">Jamoa Loyihalari</span>
+              <div className="text-2xl font-black text-slate-900 dark:text-white mt-1">{projects.length} ta</div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">Faol ishlanmalar</span>
+            </div>
+            <FolderGit2 className="w-7 h-7 text-indigo-500" />
+          </div>
+
+          <button
+            onClick={() => onNavigateMenu('Chat')}
+            className="p-5 rounded-3xl liquid-glass text-left flex items-center justify-between hover:border-emerald-500/40 transition cursor-pointer"
+          >
+            <div>
+              <span className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">Jamoa Chati</span>
+              <div className="text-sm font-black text-slate-900 dark:text-white mt-1">Real-time aloqa</div>
+              <span className="text-[11px] text-emerald-500 font-semibold">Suhbatga o'tish &rarr;</span>
+            </div>
+            <ArrowRight className="w-5 h-5 text-emerald-500" />
+          </button>
+        </div>
+      )}
+
       {/* 3. CLIENT SERVICES & PORTFOLIO SHOWCASE */}
-      {!isCreatorOrAdmin && (
+      {user.role === 'user' && (
         <div className="space-y-6">
           
           <div className="space-y-3">
@@ -485,12 +578,18 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
 
           <div className="space-y-3">
             <div className="inline-block px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/25 text-blue-600 dark:text-blue-400 text-xs font-black tracking-wide uppercase">
-              {user.role === 'creator' ? 'BOSHLIQ / CREATOR' : user.role === 'engineer' ? 'MUHANDIS / ADMIN' : 'FOYDALANUVCHI / MIJOZ'}
+              {user.role === 'creator'
+                ? 'BOSHLIQ / CREATOR'
+                : isTeamMember
+                ? `GURUH A'ZOSI (${user.role.toUpperCase()})`
+                : 'FOYDALANUVCHI / MIJOZ'}
             </div>
 
             <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-              {isCreatorOrAdmin 
-                ? 'Siz platforma boshqaruvchisiz. Barcha mijoz buyurtmalari, jamoa a\'zolari, loyihalar va sozlamalar to\'liq sizning nazoratingizda.'
+              {isCreator
+                ? 'Siz platformaning yagona boshqaruvchisisiz (Creator). Barcha mijoz buyurtmalari, jamoa a\'zolari, broadcast xabarlar, loyihalar va sayt sozlamalari to\'liq sizning nazoratingizda.'
+                : isTeamMember
+                ? 'Siz VisionCore Group jamoasi a\'zosisiz. Mijozlardan kelgan barcha buyurtmalarni ko\'rishingiz, qabul qilishingiz, chatda muloqot qilishingiz va o\'z yo\'nalishingiz bo\'yicha ishlashingiz mumkin.'
                 : 'Xush kelibsiz! Siz ushbu platformada Telegram bot, vebsayt, web app, CRM va mobil ilovalarga qulay buyurtma berishingiz, shaxsiy qaydlaringizni yuritishingiz va jamoamiz bilan bog\'lanishingiz mumkin.'}
             </p>
 

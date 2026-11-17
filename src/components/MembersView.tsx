@@ -10,9 +10,12 @@ import {
   Eye, 
   EyeOff, 
   Clock,
-  RefreshCw
+  RefreshCw,
+  Image as ImageIcon,
+  Shield
 } from 'lucide-react';
 import { User, RoleType, MemberActivity, Task, Order } from '../types';
+import { readImageFileFromGallery } from '../lib/imageUtils';
 
 interface MembersViewProps {
   currentUser: User;
@@ -26,7 +29,7 @@ interface MembersViewProps {
   darkMode: boolean;
 }
 
-type TeamRoleType = 'creator' | 'engineer' | 'researcher' | 'designer' | 'analyst';
+type TeamRoleType = 'engineer' | 'researcher' | 'designer' | 'analyst';
 
 export const MembersView: React.FC<MembersViewProps> = ({
   currentUser,
@@ -41,7 +44,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'manage' | 'activity' | 'productivity'>('manage');
 
-  // Form states (No 'user' role allowed when adding team members)
+  // Form states (No 'user' or duplicate 'creator' role allowed when adding team members)
   const [newRole, setNewRole] = useState<TeamRoleType>('engineer');
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -49,6 +52,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [newLastName, setNewLastName] = useState('');
   const [newPhone, setNewPhone] = useState('+998 ');
   const [newEmail, setNewEmail] = useState('');
+  const [newAvatar, setNewAvatar] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({});
   const [statusMsg, setStatusMsg] = useState('');
@@ -57,12 +61,13 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editRole, setEditRole] = useState<RoleType>('engineer');
   const [editPassword, setEditPassword] = useState('');
 
   const buildGeneratedCredentials = (roleForPrefix: TeamRoleType) => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const prefix = roleForPrefix === 'creator' ? 'creator' : roleForPrefix === 'engineer' ? 'admin' : roleForPrefix.substring(0, 3);
+    const prefix = roleForPrefix.substring(0, 3);
     const randomPass = Math.random().toString(36).substring(2, 8);
     return {
       username: `vcg-${prefix}${randomNum}`,
@@ -132,13 +137,13 @@ export const MembersView: React.FC<MembersViewProps> = ({
       phone: newPhone.trim() || '+998 90 000 00 00',
       email: newEmail.trim() || `${finalUsername}@visioncore.group`,
       role: newRole,
-      avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${finalUsername}`,
+      avatar: newAvatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${finalUsername}`,
       registeredAt: new Date().toISOString(),
       language: 'uz'
     };
 
     onAddMember(newUser);
-    setStatusMsg(`"${finalUsername}" (${newRole.toUpperCase()}) muvaffaqiyatli qo'shildi!`);
+    setStatusMsg(`"${finalUsername}" (${newRole.toUpperCase()}) guruh a'zosi muvaffaqiyatli qo'shildi!`);
     // Prepare fresh auto-generated credentials for next member
     const nextCreds = buildGeneratedCredentials(newRole);
     setNewUsername(nextCreds.username);
@@ -146,28 +151,53 @@ export const MembersView: React.FC<MembersViewProps> = ({
     setNewFirstName('');
     setNewLastName('');
     setNewEmail('');
+    setNewAvatar('');
+  };
+
+  const handleNewAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await readImageFileFromGallery(file, 480, 0.85);
+      setNewAvatar(compressed);
+    } catch {
+      // ignore
+    }
+    e.target.value = '';
   };
 
   const startEdit = (user: User) => {
     setEditingUserId(user.id);
     setEditFirstName(user.firstName);
     setEditLastName(user.lastName);
+    setEditUsername(user.username);
     setEditRole(user.role);
     setEditPassword(user.password || '');
   };
 
   const saveEdit = (user: User) => {
+    const cleanedUsername = editUsername.trim().toLowerCase() || user.username;
+    const duplicate = allUsers.some(u => u.id !== user.id && u.username.toLowerCase() === cleanedUsername);
+    if (duplicate) {
+      setStatusMsg(`"${cleanedUsername}" username band!`);
+      return;
+    }
+
     const updated: User = {
       ...user,
+      username: cleanedUsername,
       firstName: editFirstName.trim(),
       lastName: editLastName.trim(),
-      role: editRole,
+      role: user.role === 'creator' ? 'creator' : editRole,
       password: editPassword.trim() || user.password
     };
     onUpdateMember(updated);
     setEditingUserId(null);
-    setStatusMsg(`"${user.username}" ma'lumotlari yangilandi.`);
+    setStatusMsg(`"${updated.username}" ma'lumotlari yangilandi.`);
   };
+
+  const teamMembers = allUsers.filter(u => u.role !== 'user');
+  const regularUsers = allUsers.filter(u => u.role === 'user');
 
   // Real Team Productivity Line Graph computed from actual tasks, orders & activities over the last 7 days
   const productivityData = useMemo(() => {
@@ -307,11 +337,10 @@ export const MembersView: React.FC<MembersViewProps> = ({
                   onChange={(e) => handleRoleChangeWithAutoGen(e.target.value as TeamRoleType)}
                   className="w-full px-4 py-3 rounded-xl liquid-glass-subtle text-xs sm:text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                 >
-                  <option value="engineer" className="bg-slate-900 text-white">Engineer (Bosh Muhandis & Admin)</option>
-                  <option value="researcher" className="bg-slate-900 text-white">Researcher (AI Tadqiqotchi)</option>
-                  <option value="designer" className="bg-slate-900 text-white">Designer (UI/UX & Tizim Arxitektori)</option>
-                  <option value="analyst" className="bg-slate-900 text-white">Analyst (Tahlilchi & QA Tester)</option>
-                  <option value="creator" className="bg-slate-900 text-white">Creator (Boshliq / Guruh Rahbari)</option>
+                  <option value="engineer" className="bg-slate-900 text-white">Engineer (Dasturchi / Oddiy Guruh A'zosi)</option>
+                  <option value="researcher" className="bg-slate-900 text-white">Researcher (AI Tadqiqotchi / Guruh A'zosi)</option>
+                  <option value="designer" className="bg-slate-900 text-white">Designer (UI/UX & Arxitektor / Guruh A'zosi)</option>
+                  <option value="analyst" className="bg-slate-900 text-white">Analyst (Tahlilchi & QA / Guruh A'zosi)</option>
                 </select>
               </div>
 
@@ -426,7 +455,18 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                <label className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl liquid-glass-subtle text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer hover:border-blue-500/40 transition">
+                  <ImageIcon className="w-4 h-4 text-blue-500" />
+                  <span>{newAvatar ? 'Rasm tanlandi (Almashtirish)' : 'Galereyadan rasm tanlash (ixtiyoriy)'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleNewAvatarPick}
+                    className="hidden"
+                  />
+                </label>
+
                 <button
                   type="submit"
                   className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition shadow-md active:scale-95 cursor-pointer"
@@ -437,14 +477,18 @@ export const MembersView: React.FC<MembersViewProps> = ({
             </form>
           </div>
 
-          {/* Members Table */}
+          {/* TABLE 1: TEAM MEMBERS (Creator + Added Group Members) */}
           <div className="rounded-3xl liquid-glass overflow-hidden">
             <div className="p-5 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between">
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  GURUH A'ZOLARI VA FOYDALANUVCHILAR ({allUsers.length})
+              <div className="flex items-center space-x-2">
+                <Shield className="w-4 h-4 text-blue-500" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  GURUH A'ZOLARI ({teamMembers.length})
                 </h3>
               </div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Creator (yagona rahbar) va creator qo'shgan jamoa a'zolari
+              </span>
             </div>
 
             <div className="overflow-x-auto">
@@ -459,142 +503,329 @@ export const MembersView: React.FC<MembersViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200/60 dark:divide-white/10">
-                  {allUsers.map((u) => {
-                    const isEditing = editingUserId === u.id;
-                    const isVisible = showPasswords[u.id];
+                  {teamMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
+                        Hozircha qo'shilgan guruh a'zolari yo'q.
+                      </td>
+                    </tr>
+                  ) : (
+                    teamMembers.map((u) => {
+                      const isEditing = editingUserId === u.id;
+                      const isVisible = showPasswords[u.id];
+                      const isSingleCreator = u.role === 'creator';
 
-                    return (
-                      <tr key={u.id} className="hover:bg-slate-200/30 dark:hover:bg-white/5 transition">
-                        <td className="p-4">
-                          <div className="flex items-center space-x-3">
-                            <img src={u.avatar} alt={u.firstName} className="w-8 h-8 rounded-full object-cover border border-slate-300 dark:border-white/20" />
-                            <div>
-                              {isEditing ? (
-                                <div className="flex space-x-1">
-                                  <input 
-                                    type="text" 
-                                    value={editFirstName} 
-                                    onChange={e => setEditFirstName(e.target.value)} 
-                                    className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
-                                  />
-                                  <input 
-                                    type="text" 
-                                    value={editLastName} 
-                                    onChange={e => setEditLastName(e.target.value)} 
-                                    className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
-                                  />
-                                </div>
-                              ) : (
-                                <div className="font-bold text-slate-900 dark:text-white">
-                                  {u.firstName || u.username} {u.lastName || ''}
-                                </div>
-                              )}
-                              <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{u.id}</span>
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-200/30 dark:hover:bg-white/5 transition">
+                          <td className="p-4">
+                            <div className="flex items-center space-x-3">
+                              <img src={u.avatar} alt={u.firstName} className="w-8 h-8 rounded-full object-cover border border-slate-300 dark:border-white/20" />
+                              <div>
+                                {isEditing ? (
+                                  <div className="flex space-x-1">
+                                    <input 
+                                      type="text" 
+                                      value={editFirstName} 
+                                      onChange={e => setEditFirstName(e.target.value)} 
+                                      className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
+                                    />
+                                    <input 
+                                      type="text" 
+                                      value={editLastName} 
+                                      onChange={e => setEditLastName(e.target.value)} 
+                                      className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="font-bold text-slate-900 dark:text-white">
+                                    {u.firstName || u.username} {u.lastName || ''}
+                                  </div>
+                                )}
+                                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{u.id}</span>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="p-4">
-                          {isEditing ? (
-                            <select
-                              value={editRole}
-                              onChange={e => setEditRole(e.target.value as RoleType)}
-                              className="px-2 py-1 rounded liquid-glass-subtle text-xs font-bold"
-                            >
-                              <option value="creator" className="bg-slate-900 text-white">Creator</option>
-                              <option value="engineer" className="bg-slate-900 text-white">Engineer</option>
-                              <option value="researcher" className="bg-slate-900 text-white">Researcher</option>
-                              <option value="designer" className="bg-slate-900 text-white">Designer</option>
-                              <option value="analyst" className="bg-slate-900 text-white">Analyst</option>
-                            </select>
-                          ) : (
-                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
-                              u.role === 'creator'
-                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                                : u.role === 'engineer'
-                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
-                                : u.role === 'researcher'
-                                ? 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30'
-                                : u.role === 'designer'
-                                ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30'
-                                : u.role === 'analyst'
-                                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
-                                : 'bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-400/30'
-                            }`}>
-                              {u.role}
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="p-4 font-mono text-slate-800 dark:text-slate-200">
-                          <div className="flex items-center space-x-1.5">
-                            <span>{u.username}</span>
-                            <button
-                              onClick={() => handleCopy(u.username, `u-${u.id}`)}
-                              className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                            >
-                              {copiedId === `u-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                            </button>
-                          </div>
-                        </td>
-
-                        <td className="p-4 font-mono text-slate-800 dark:text-slate-200">
-                          {isEditing ? (
-                            <input 
-                              type="text" 
-                              value={editPassword} 
-                              onChange={e => setEditPassword(e.target.value)} 
-                              className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
-                            />
-                          ) : u.password ? (
-                            <div className="flex items-center space-x-2">
-                              <span>{isVisible ? u.password : '••••••••'}</span>
-                              <button
-                                onClick={() => togglePasswordVisibility(u.id)}
-                                className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                          <td className="p-4">
+                            {isEditing && !isSingleCreator ? (
+                              <select
+                                value={editRole}
+                                onChange={e => setEditRole(e.target.value as RoleType)}
+                                className="px-2 py-1 rounded liquid-glass-subtle text-xs font-bold"
                               >
-                                {isVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                              </button>
-                              <button
-                                onClick={() => handleCopy(u.password || '', `p-${u.id}`)}
-                                className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                              >
-                                {copiedId === `p-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[11px] font-sans font-semibold text-emerald-600 dark:text-emerald-400">
-                              Backend himoyalangan
-                            </span>
-                          )}
-                        </td>
-
-                        <td className="p-4 text-right">
-                          <div className="flex items-center justify-end space-x-3">
-                            {isEditing ? (
-                              <>
-                                <button
-                                  onClick={() => saveEdit(u)}
-                                  className="text-emerald-500 font-bold hover:underline cursor-pointer"
-                                >
-                                  Saqlash
-                                </button>
-                                <button
-                                  onClick={() => setEditingUserId(null)}
-                                  className="text-slate-400 hover:underline cursor-pointer"
-                                >
-                                  Bekor
-                                </button>
-                              </>
+                                <option value="engineer" className="bg-slate-900 text-white">Engineer</option>
+                                <option value="researcher" className="bg-slate-900 text-white">Researcher</option>
+                                <option value="designer" className="bg-slate-900 text-white">Designer</option>
+                                <option value="analyst" className="bg-slate-900 text-white">Analyst</option>
+                              </select>
                             ) : (
-                              <>
+                              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
+                                isSingleCreator
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                  : u.role === 'engineer'
+                                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                                  : u.role === 'researcher'
+                                  ? 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30'
+                                  : u.role === 'designer'
+                                  ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30'
+                                  : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                              }`}>
+                                {u.role}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-4 font-mono text-slate-800 dark:text-slate-200">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editUsername}
+                                onChange={e => setEditUsername(e.target.value)}
+                                className="px-2 py-1 rounded liquid-glass-subtle text-xs font-mono"
+                              />
+                            ) : (
+                              <div className="flex items-center space-x-1.5">
+                                <span>{u.username}</span>
                                 <button
-                                  onClick={() => startEdit(u)}
-                                  className="text-blue-600 dark:text-blue-400 hover:underline font-bold cursor-pointer"
+                                  onClick={() => handleCopy(u.username, `u-${u.id}`)}
+                                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
                                 >
-                                  Tahrirlash
+                                  {copiedId === `u-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                                 </button>
-                                {allUsers.length > 1 && u.id !== currentUser.id && (
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="p-4 font-mono text-slate-800 dark:text-slate-200">
+                            {isEditing ? (
+                              <input 
+                                type="text" 
+                                value={editPassword} 
+                                onChange={e => setEditPassword(e.target.value)} 
+                                className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
+                              />
+                            ) : u.password ? (
+                              <div className="flex items-center space-x-2">
+                                <span>{isVisible ? u.password : '••••••••'}</span>
+                                <button
+                                  onClick={() => togglePasswordVisibility(u.id)}
+                                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                                >
+                                  {isVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                </button>
+                                <button
+                                  onClick={() => handleCopy(u.password || '', `p-${u.id}`)}
+                                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                                >
+                                  {copiedId === `p-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] font-sans font-semibold text-emerald-600 dark:text-emerald-400">
+                                Backend himoyalangan
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end space-x-3">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={() => saveEdit(u)}
+                                    className="text-emerald-500 font-bold hover:underline cursor-pointer"
+                                  >
+                                    Saqlash
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingUserId(null)}
+                                    className="text-slate-400 hover:underline cursor-pointer"
+                                  >
+                                    Bekor
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => startEdit(u)}
+                                    className="text-blue-600 dark:text-blue-400 hover:underline font-bold cursor-pointer"
+                                  >
+                                    Tahrirlash
+                                  </button>
+                                  {!isSingleCreator && u.id !== currentUser.id && (
+                                    <button
+                                      onClick={() => {
+                                        if (confirm(`Rostdan ham "${u.username}"ni o'chirmoqchimisiz?`)) {
+                                          onDeleteMember(u.id);
+                                        }
+                                      }}
+                                      className="text-rose-500 hover:text-rose-400 font-bold cursor-pointer"
+                                    >
+                                      O'chirish
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* TABLE 2: REGULAR USERS (Self-registered Clients / Users) */}
+          <div className="rounded-3xl liquid-glass overflow-hidden">
+            <div className="p-5 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Users className="w-4 h-4 text-emerald-500" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  ODDIY USERLAR ({regularUsers.length})
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Saytdan mustaqil ro'yxatdan o'tgan foydalanuvchilar (mijozlar)
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-200/40 dark:bg-white/5 text-slate-600 dark:text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200/60 dark:border-white/10">
+                    <th className="p-4">ISMI / FOYDALANUVCHI</th>
+                    <th className="p-4">ROL</th>
+                    <th className="p-4">USERNAME</th>
+                    <th className="p-4">PAROL</th>
+                    <th className="p-4 text-right">AMALLAR</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/60 dark:divide-white/10">
+                  {regularUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
+                        Hozircha ro'yxatdan o'tgan oddiy userlar yo'q.
+                      </td>
+                    </tr>
+                  ) : (
+                    regularUsers.map((u) => {
+                      const isEditing = editingUserId === u.id;
+                      const isVisible = showPasswords[u.id];
+
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-200/30 dark:hover:bg-white/5 transition">
+                          <td className="p-4">
+                            <div className="flex items-center space-x-3">
+                              <img src={u.avatar} alt={u.firstName} className="w-8 h-8 rounded-full object-cover border border-slate-300 dark:border-white/20" />
+                              <div>
+                                {isEditing ? (
+                                  <div className="flex space-x-1">
+                                    <input 
+                                      type="text" 
+                                      value={editFirstName} 
+                                      onChange={e => setEditFirstName(e.target.value)} 
+                                      className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
+                                    />
+                                    <input 
+                                      type="text" 
+                                      value={editLastName} 
+                                      onChange={e => setEditLastName(e.target.value)} 
+                                      className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="font-bold text-slate-900 dark:text-white">
+                                    {u.firstName || u.username} {u.lastName || ''}
+                                  </div>
+                                )}
+                                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{u.id}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="p-4">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-400/30">
+                              USER
+                            </span>
+                          </td>
+
+                          <td className="p-4 font-mono text-slate-800 dark:text-slate-200">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editUsername}
+                                onChange={e => setEditUsername(e.target.value)}
+                                className="px-2 py-1 rounded liquid-glass-subtle text-xs font-mono"
+                              />
+                            ) : (
+                              <div className="flex items-center space-x-1.5">
+                                <span>{u.username}</span>
+                                <button
+                                  onClick={() => handleCopy(u.username, `u-${u.id}`)}
+                                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                                >
+                                  {copiedId === `u-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="p-4 font-mono text-slate-800 dark:text-slate-200">
+                            {isEditing ? (
+                              <input 
+                                type="text" 
+                                value={editPassword} 
+                                onChange={e => setEditPassword(e.target.value)} 
+                                className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
+                              />
+                            ) : u.password ? (
+                              <div className="flex items-center space-x-2">
+                                <span>{isVisible ? u.password : '••••••••'}</span>
+                                <button
+                                  onClick={() => togglePasswordVisibility(u.id)}
+                                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                                >
+                                  {isVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                </button>
+                                <button
+                                  onClick={() => handleCopy(u.password || '', `p-${u.id}`)}
+                                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                                >
+                                  {copiedId === `p-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] font-sans text-slate-400">—</span>
+                            )}
+                          </td>
+
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end space-x-3">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={() => saveEdit(u)}
+                                    className="text-emerald-500 font-bold hover:underline cursor-pointer"
+                                  >
+                                    Saqlash
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingUserId(null)}
+                                    className="text-slate-400 hover:underline cursor-pointer"
+                                  >
+                                    Bekor
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => startEdit(u)}
+                                    className="text-blue-600 dark:text-blue-400 hover:underline font-bold cursor-pointer"
+                                  >
+                                    Tahrirlash
+                                  </button>
                                   <button
                                     onClick={() => {
                                       if (confirm(`Rostdan ham "${u.username}"ni o'chirmoqchimisiz?`)) {
@@ -605,14 +836,14 @@ export const MembersView: React.FC<MembersViewProps> = ({
                                   >
                                     O'chirish
                                   </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

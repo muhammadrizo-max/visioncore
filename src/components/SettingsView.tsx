@@ -1,32 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Settings as SettingsIcon, 
   Moon, 
   Sun, 
   Shield, 
-  Database, 
   Download, 
   Upload, 
   Sparkles, 
-  Check, 
-  Copy, 
   Image as ImageIcon,
   CheckCircle2,
   Plus, 
   Trash2, 
   Edit2, 
   ExternalLink, 
-  Layers, 
-  RefreshCw, 
-  CloudDownload 
+  Layers,
+  X
 } from 'lucide-react';
 import { User, SiteSettings, Order, Project, Task, NoteItem, PortfolioItem } from '../types';
-import {
-  getStoredSupabaseConfig,
-  saveSupabaseConfig,
-  testSupabaseHealth,
-  FULL_SUPABASE_SQL
-} from '../lib/supabase';
+import { readImageFileFromGallery } from '../lib/imageUtils';
 
 interface SettingsViewProps {
   user: User;
@@ -40,8 +31,6 @@ interface SettingsViewProps {
   tasks: Task[];
   notes: NoteItem[];
   onRestoreBackup?: (data: any) => void;
-  onSyncSupabase?: () => Promise<boolean>;
-  supabaseConnected?: boolean;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -55,11 +44,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   projects,
   tasks,
   notes,
-  onRestoreBackup,
-  onSyncSupabase,
-  supabaseConnected = false
+  onRestoreBackup
 }) => {
-  const isCreatorOrAdmin = user.role === 'creator' || user.role === 'engineer';
+  // Strictly ONLY Creator controls site branding, portfolio, background and backups
+  const isCreator = user.role === 'creator';
 
   // Site general settings
   const [siteName, setSiteName] = useState(siteSettings.siteName || 'VisionCore Group');
@@ -73,12 +61,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     siteSettings.creatorBackgroundType || 'default'
   );
   const [bgImage, setBgImage] = useState(siteSettings.creatorBackgroundImage || '');
+  const bgFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Portfolio list and Marquee toggle
+  // Portfolio list
   const [portfolioList, setPortfolioList] = useState<PortfolioItem[]>(siteSettings.portfolio || []);
-  const [marqueeEnabled, setMarqueeEnabled] = useState<boolean>(
-    siteSettings.portfolioMarqueeEnabled !== undefined ? siteSettings.portfolioMarqueeEnabled : true
-  );
 
   // Portfolio modal / form state
   const [showPortfolioModal, setShowPortfolioModal] = useState<boolean>(false);
@@ -87,82 +73,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [portCategory, setPortCategory] = useState<string>('Web App');
   const [portImage, setPortImage] = useState<string>('');
   const [portDesc, setPortDesc] = useState<string>('');
-  const [portTags, setPortTags] = useState<string>('React, Node.js');
+  const [portTags, setPortTags] = useState<string>('React, TypeScript');
   const [portLink, setPortLink] = useState<string>('');
+  const [showUrlFallback, setShowUrlFallback] = useState<boolean>(false);
+  const portFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Supabase Real Live Monitoring
-  const storedSb = getStoredSupabaseConfig();
-  const [supabaseUrl, setSupabaseUrl] = useState<string>(siteSettings.supabaseUrl || storedSb.url || '');
-  const [supabaseAnonKey, setSupabaseAnonKey] = useState<string>(siteSettings.supabaseAnonKey || storedSb.anonKey || '');
-  const [testingSupabase, setTestingSupabase] = useState<boolean>(false);
-  const [syncingSupabase, setSyncingSupabase] = useState<boolean>(false);
-  const [supabaseStatus, setSupabaseStatus] = useState<{
-    connected: boolean;
-    latencyMs?: number;
-    statusCode?: number;
-    message?: string;
-    detectedTablesCount?: number;
-    tableCounts?: Record<string, number>;
-    lastChecked?: string;
-  } | null>(null);
-
-  // SQL Copy & Save state
-  const [copiedSql, setCopiedSql] = useState(false);
   const [savedStatus, setSavedStatus] = useState(false);
 
-  // Auto-check connection on mount if config already exists
+  // Sync local state when remote siteSettings updates
   useEffect(() => {
-    if (isCreatorOrAdmin && supabaseUrl && supabaseAnonKey) {
-      testSupabaseHealth(supabaseUrl, supabaseAnonKey).then((res) => {
-        setSupabaseStatus(res);
-      });
-    }
-  }, []);
+    setSiteName(siteSettings.siteName || 'VisionCore Group');
+    setTelegramUsername(siteSettings.telegramUsername || '@visioncore_admin');
+    setPhoneContact(siteSettings.phoneContact || '+998 90 000 00 00');
+    setHeroTitle(siteSettings.heroTitle || '');
+    setHeroSubtitle(siteSettings.heroSubtitle || '');
+    setBgType(siteSettings.creatorBackgroundType || 'default');
+    setBgImage(siteSettings.creatorBackgroundImage || '');
+    setPortfolioList(siteSettings.portfolio || []);
+  }, [siteSettings]);
 
-  const testSupabaseConnection = async () => {
-    if (!supabaseUrl.trim() || !supabaseAnonKey.trim()) {
-      setSupabaseStatus({
-        connected: false,
-        message: "Iltimos, Supabase Project URL va Anon API Key ni kiriting!"
-      });
-      return;
-    }
-
-    setTestingSupabase(true);
-    saveSupabaseConfig(supabaseUrl, supabaseAnonKey);
-    const res = await testSupabaseHealth(supabaseUrl, supabaseAnonKey);
-    setSupabaseStatus(res);
-
+  const handleSelectBackgroundType = (nextType: 'default' | 'matrix' | 'custom_image') => {
+    setBgType(nextType);
     onUpdateSiteSettings({
       ...siteSettings,
-      supabaseUrl: supabaseUrl.trim().replace(/\/+$/, ''),
-      supabaseAnonKey: supabaseAnonKey.trim()
+      creatorBackgroundType: nextType,
+      creatorBackgroundImage: bgImage
     });
-
-    if (res.connected && onSyncSupabase) {
-      await onSyncSupabase();
-    }
-    setTestingSupabase(false);
   };
 
-  const handleManualSync = async () => {
-    if (!onSyncSupabase) return;
-    setSyncingSupabase(true);
-    saveSupabaseConfig(supabaseUrl, supabaseAnonKey);
-    await onSyncSupabase();
-    const res = await testSupabaseHealth(supabaseUrl, supabaseAnonKey);
-    setSupabaseStatus(res);
-    setSyncingSupabase(false);
+  const handleGalleryBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await readImageFileFromGallery(file, 1920, 0.84);
+      setBgImage(compressed);
+      setBgType('custom_image');
+      onUpdateSiteSettings({
+        ...siteSettings,
+        creatorBackgroundType: 'custom_image',
+        creatorBackgroundImage: compressed
+      });
+    } catch {
+      // ignore
+    }
+    e.target.value = '';
   };
 
   const handleOpenAddPortfolio = () => {
     setEditingPortId(null);
     setPortTitle('');
     setPortCategory('Web App');
-    setPortImage('https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600');
+    setPortImage('');
     setPortDesc('');
     setPortTags('React, TypeScript, Node.js');
     setPortLink('');
+    setShowUrlFallback(false);
     setShowPortfolioModal(true);
   };
 
@@ -174,7 +139,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setPortDesc(item.description);
     setPortTags(item.tags.join(', '));
     setPortLink(item.link || '');
+    setShowUrlFallback(false);
     setShowPortfolioModal(true);
+  };
+
+  const handleGalleryPortfolioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await readImageFileFromGallery(file, 1000, 0.82);
+      setPortImage(compressed);
+    } catch {
+      // ignore
+    }
+    e.target.value = '';
   };
 
   const handleSavePortfolioItem = (e: React.FormEvent) => {
@@ -182,45 +160,55 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!portTitle.trim()) return;
 
     const tagsArr = portTags.split(',').map(s => s.trim()).filter(Boolean);
+    const resolvedImage = portImage.trim() || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600';
 
+    let nextPortfolio: PortfolioItem[];
     if (editingPortId) {
-      setPortfolioList(prev => prev.map(p => {
-        if (p.id === editingPortId) {
-          return {
-            ...p,
-            title: portTitle.trim(),
-            category: portCategory,
-            image: portImage.trim() || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600',
-            description: portDesc.trim(),
-            tags: tagsArr,
-            link: portLink.trim() || undefined
-          };
-        }
-        return p;
-      }));
+      nextPortfolio = portfolioList.map(p =>
+        p.id === editingPortId
+          ? {
+              ...p,
+              title: portTitle.trim(),
+              category: portCategory,
+              image: resolvedImage,
+              description: portDesc.trim(),
+              tags: tagsArr,
+              link: portLink.trim() || undefined
+            }
+          : p
+      );
     } else {
       const newItem: PortfolioItem = {
         id: `port-${Date.now()}`,
         title: portTitle.trim(),
         category: portCategory,
-        image: portImage.trim() || 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=600',
+        image: resolvedImage,
         description: portDesc.trim(),
         tags: tagsArr,
         link: portLink.trim() || undefined
       };
-      setPortfolioList(prev => [newItem, ...prev]);
+      nextPortfolio = [newItem, ...portfolioList];
     }
 
+    setPortfolioList(nextPortfolio);
+    onUpdateSiteSettings({
+      ...siteSettings,
+      portfolio: nextPortfolio
+    });
     setShowPortfolioModal(false);
   };
 
   const handleDeletePortfolioItem = (id: string) => {
-    setPortfolioList(prev => prev.filter(p => p.id !== id));
+    const nextPortfolio = portfolioList.filter(p => p.id !== id);
+    setPortfolioList(nextPortfolio);
+    onUpdateSiteSettings({
+      ...siteSettings,
+      portfolio: nextPortfolio
+    });
   };
 
   const handleSaveAllSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    saveSupabaseConfig(supabaseUrl, supabaseAnonKey);
     onUpdateSiteSettings({
       ...siteSettings,
       siteName,
@@ -230,10 +218,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       heroSubtitle,
       creatorBackgroundType: bgType,
       creatorBackgroundImage: bgImage,
-      portfolioMarqueeEnabled: marqueeEnabled,
-      portfolio: portfolioList,
-      supabaseUrl: supabaseUrl.trim().replace(/\/+$/, ''),
-      supabaseAnonKey: supabaseAnonKey.trim()
+      portfolio: portfolioList
     });
     setSavedStatus(true);
     setTimeout(() => setSavedStatus(false), 2500);
@@ -241,14 +226,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const exportBackupJSON = () => {
     const data = {
-      version: 'vcg-v4',
+      version: 'vcg-v5',
       exportDate: new Date().toISOString(),
       siteSettings: {
         ...siteSettings,
-        portfolio: portfolioList,
-        portfolioMarqueeEnabled: marqueeEnabled,
-        supabaseUrl,
-        supabaseAnonKey
+        portfolio: portfolioList
       },
       users: allUsers,
       orders,
@@ -281,23 +263,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const copySql = () => {
-    navigator.clipboard.writeText(FULL_SUPABASE_SQL);
-    setCopiedSql(true);
-    setTimeout(() => setCopiedSql(false), 2000);
-  };
-
   return (
     <div className="p-4 sm:p-6 space-y-6 max-w-5xl mx-auto">
       
-      {/* Portfolio Add / Edit Modal */}
+      {/* Portfolio Add / Edit Modal (Gallery-First Image Selection) */}
       {showPortfolioModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
-          <div className="relative w-full max-w-lg p-6 sm:p-8 rounded-3xl liquid-glass text-slate-900 dark:text-white space-y-4">
-            <h3 className="text-base font-bold flex items-center space-x-2">
-              <Layers className="w-5 h-5 text-blue-500" />
-              <span>{editingPortId ? 'Loyihani Tahrirlash' : 'Yangi Portfolio Loyihasini Qo\'shish'}</span>
-            </h3>
+          <div className="relative w-full max-w-lg p-6 sm:p-8 rounded-3xl liquid-glass text-slate-900 dark:text-white space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold flex items-center space-x-2">
+                <Layers className="w-5 h-5 text-blue-500" />
+                <span>{editingPortId ? 'Loyihani Tahrirlash' : 'Yangi Portfolio Loyihasini Qo\'shish'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPortfolioModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <form onSubmit={handleSavePortfolioItem} className="space-y-3.5">
               <div className="space-y-1">
@@ -341,15 +326,68 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Rasm URL Manzili</label>
+              {/* Gallery Image Upload (Primary) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Loyiha Rasmi (Galereyadan tanlash)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowUrlFallback(!showUrlFallback)}
+                    className="text-[11px] text-blue-500 hover:underline font-semibold cursor-pointer"
+                  >
+                    {showUrlFallback ? 'Galereya rejimiga qaytish' : 'Yoki havola (URL) kiritish'}
+                  </button>
+                </div>
+
                 <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={portImage}
-                  onChange={e => setPortImage(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                  ref={portFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleGalleryPortfolioUpload}
+                  className="hidden"
                 />
+
+                {!showUrlFallback ? (
+                  <div
+                    onClick={() => portFileInputRef.current?.click()}
+                    className="p-4 rounded-2xl liquid-glass-subtle border border-dashed border-blue-500/40 hover:border-blue-500 transition cursor-pointer flex flex-col items-center justify-center text-center space-y-2"
+                  >
+                    {portImage ? (
+                      <div className="relative w-full">
+                        <img
+                          src={portImage}
+                          alt="Loyiha preview"
+                          className="w-full h-36 object-cover rounded-xl border border-white/10"
+                        />
+                        <span className="mt-2 inline-block text-[11px] font-bold text-blue-500">
+                          Boshqa rasm tanlash uchun bosing
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/15 text-blue-500 flex items-center justify-center">
+                          <ImageIcon className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Galereyadan rasm tanlash
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                          PNG, JPG, WebP formatdagi rasmlar qo'llab-quvvatlanadi
+                        </span>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/..."
+                    value={portImage}
+                    onChange={e => setPortImage(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                  />
+                )}
               </div>
 
               <div className="space-y-1">
@@ -401,7 +439,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <span>Sozlamalar</span>
         </h1>
         <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-          Mavzu (Liquid Glass Dark/Light), portfolio boshqaruvi, Supabase real-time baza ulanishi va zaxiralash
+          {isCreator
+            ? 'Mavzu (Liquid Glass Dark/Light), orqa fon, portfolio boshqaruvi va zaxiralash'
+            : 'Interfeys ko\'rinishi (Liquid Glass Dark/Light) sozlamalari'}
         </p>
       </div>
 
@@ -413,7 +453,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
-      {/* 1. Theme Appearance (No multi-language switcher) */}
+      {/* 1. Theme Appearance */}
       <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
         <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
           {darkMode ? <Moon className="w-4 h-4 text-amber-400" /> : <Sun className="w-4 h-4 text-amber-500" />}
@@ -438,153 +478,118 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* CREATOR & ENGINEER SECTIONS */}
-      {isCreatorOrAdmin && (
+      {/* CREATOR ONLY SECTIONS */}
+      {isCreator && (
         <form onSubmit={handleSaveAllSettings} className="space-y-6">
           
-          {/* 2. REAL SUPABASE MONITOR & LIVE SYNC */}
-          <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
-                  <Database className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                    <span>Supabase Real PostgreSQL Ulanishi</span>
-                    <span className={`w-2.5 h-2.5 rounded-full ${supabaseConnected || supabaseStatus?.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Barcha ma'lumotlar (a'zolar, chatlar, buyurtmalar, loyihalar) Supabase bazasida real-time saqlanadi
-                  </p>
-                </div>
+          {/* 2. Creator Visual Theme (Instant Background Switch + Gallery Upload) */}
+          <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+                <Sparkles className="w-4 h-4" />
               </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Boshqaruv Paneli Orqa Foni
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Tanlaganingiz zahoti darhol qo'llaniladi: toza fon, raqamlar yomg'iri yoki galereyadan shaxsiy rasm
+                </p>
+              </div>
+            </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={testSupabaseConnection}
-                  disabled={testingSupabase}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${testingSupabase ? 'animate-spin' : ''}`} />
-                  <span>{testingSupabase ? 'Tekshirilmoqda...' : 'Ulash va Tekshirish'}</span>
-                </button>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => handleSelectBackgroundType('default')}
+                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+                  bgType === 'default' 
+                    ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500' 
+                    : 'liquid-glass-subtle'
+                }`}
+              >
+                <div className="font-bold text-xs text-slate-900 dark:text-white mb-1">Standart Rejim</div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">Toza gradient va Liquid Glass (yomg'irsiz)</div>
+              </button>
 
-                {onSyncSupabase && (
+              <button
+                type="button"
+                onClick={() => handleSelectBackgroundType('matrix')}
+                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+                  bgType === 'matrix' 
+                    ? 'border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500' 
+                    : 'liquid-glass-subtle'
+                }`}
+              >
+                <div className="font-bold text-xs text-emerald-600 dark:text-emerald-400 mb-1 flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Raqamlar Yomg'iri (Matrix)</span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">Tiniq kiber animatsion raqamlar oqimi</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectBackgroundType('custom_image')}
+                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+                  bgType === 'custom_image' 
+                    ? 'border-purple-500 bg-purple-500/15 ring-1 ring-purple-500' 
+                    : 'liquid-glass-subtle'
+                }`}
+              >
+                <div className="font-bold text-xs text-purple-600 dark:text-purple-400 mb-1 flex items-center space-x-1.5">
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>Shaxsiy Fon Rasmi</span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">Galereyadan tanlangan rasm foni</div>
+              </button>
+            </div>
+
+            {bgType === 'custom_image' && (
+              <div className="pt-2 space-y-3">
+                <input
+                  ref={bgFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleGalleryBgUpload}
+                  className="hidden"
+                />
+
+                <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
-                    onClick={handleManualSync}
-                    disabled={syncingSupabase}
-                    className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-xs transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
+                    onClick={() => bgFileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center space-x-2 shadow-md cursor-pointer"
                   >
-                    <CloudDownload className={`w-3.5 h-3.5 ${syncingSupabase ? 'animate-bounce' : ''}`} />
-                    <span>{syncingSupabase ? 'Yuklanmoqda...' : 'Bazani Sinxronlash'}</span>
+                    <ImageIcon className="w-4 h-4" />
+                    <span>Galereyadan Fon Rasmi Tanlash</span>
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  onClick={copySql}
-                  className="px-3 py-2 rounded-xl bg-emerald-600/15 hover:bg-emerald-600 text-emerald-700 dark:text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
-                >
-                  {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedSql ? 'Nusxalandi' : 'To\'liq SQL Sxema'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Supabase API Credentials Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
-                  <span>Supabase Project URL</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">(https://...supabase.co)</span>
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://abcdefghijkl.supabase.co"
-                  value={supabaseUrl}
-                  onChange={e => setSupabaseUrl(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
-                  <span>Supabase Anon Key</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">(eyJhbGciOi...)</span>
-                </label>
-                <input
-                  type="password"
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  value={supabaseAnonKey}
-                  onChange={e => setSupabaseAnonKey(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            {/* Real-time Telemetry Dashboard Card */}
-            {supabaseStatus && (
-              <div className={`p-4 rounded-2xl border text-xs space-y-3 animate-in fade-in ${
-                supabaseStatus.connected
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-900 dark:text-emerald-100'
-                  : 'bg-rose-500/15 border-rose-500/30 text-rose-900 dark:text-rose-100'
-              }`}>
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/10 dark:border-white/10 pb-2.5">
-                  <div className="flex items-center space-x-2">
-                    <span className={`w-3 h-3 rounded-full ${supabaseStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                    <span className="font-extrabold text-sm">
-                      {supabaseStatus.connected ? 'Supabase Bazasiga Ulandi (Online)' : 'Ulanishda Xatolik (Offline)'}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3 text-[11px] font-mono">
-                    {supabaseStatus.statusCode !== undefined && (
-                      <span>Status: <strong>HTTP {supabaseStatus.statusCode || 'Xato'}</strong></span>
-                    )}
-                    {supabaseStatus.latencyMs !== undefined && (
-                      <span>Ping: <strong>{supabaseStatus.latencyMs} ms</strong></span>
-                    )}
-                    {supabaseStatus.lastChecked && (
-                      <span>Tekshirildi: <strong>{supabaseStatus.lastChecked}</strong></span>
-                    )}
-                  </div>
+                  {bgImage && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBgImage('');
+                        onUpdateSiteSettings({
+                          ...siteSettings,
+                          creatorBackgroundType: 'custom_image',
+                          creatorBackgroundImage: ''
+                        });
+                      }}
+                      className="px-3.5 py-2 rounded-xl liquid-glass-subtle text-xs font-bold text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+                    >
+                      Rasmni tozalash
+                    </button>
+                  )}
                 </div>
 
-                <p className="text-xs font-medium leading-relaxed">
-                  {supabaseStatus.message}
-                </p>
-
-                {supabaseStatus.connected && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-1 font-mono text-[11px]">
-                    {['users', 'orders', 'projects', 'tasks', 'notes', 'chats'].map((tbl) => (
-                      <div key={tbl} className="p-2 rounded-xl bg-black/10 dark:bg-white/10">
-                        <span className="text-[10px] block opacity-75 uppercase">{tbl}:</span>
-                        <span className="font-bold">
-                          {supabaseStatus.tableCounts && supabaseStatus.tableCounts[tbl] !== undefined
-                            ? `${supabaseStatus.tableCounts[tbl]} ta yozuv`
-                            : 'Yaratilmagan'}
-                        </span>
-                      </div>
-                    ))}
+                {bgImage && (
+                  <div className="rounded-2xl overflow-hidden border border-purple-500/30 max-w-sm">
+                    <img src={bgImage} alt="Orqa fon preview" className="w-full h-32 object-cover" />
                   </div>
                 )}
               </div>
             )}
-
-            {/* SQL Copy Instructions */}
-            <div className="p-4 rounded-2xl liquid-glass-subtle text-xs space-y-2">
-              <div className="flex items-center space-x-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">
-                  Supabase 10 ta Jadval Sxemasi Tayyor (PostgreSQL 15+)
-                </span>
-              </div>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-                Supabase Dashboard &rarr; SQL Editor bo'limiga o'ting, yuqoridagi <strong>To'liq SQL Sxema</strong> tugmasini bosib nusxalangan kodni joylang va <strong>Run</strong> tugmasini bosing. Barcha 10 ta jadval (users, orders, projects, tasks, notes, chats, reminders, activities, notifications, site_settings) va RLS ruxsatlari avtomatik yaratiladi.
-              </p>
-            </div>
           </div>
 
           {/* 3. PORTFOLIO & DONE WORKS MANAGEMENT */}
@@ -673,86 +678,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* 4. Creator Visual Theme (Matrix or Custom Image) */}
-          <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Boshqaruv Paneli Orqa Foni
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Liquid Glass oynalari ortidan tiniq ko'rinuvchi raqamlar yomg'iri yoki shaxsiy fon rasmi
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => setBgType('default')}
-                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
-                  bgType === 'default' 
-                    ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500' 
-                    : 'liquid-glass-subtle'
-                }`}
-              >
-                <div className="font-bold text-xs text-slate-900 dark:text-white mb-1">Standart Rejim</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Toza gradient va Liquid Glass</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setBgType('matrix')}
-                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
-                  bgType === 'matrix' 
-                    ? 'border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500' 
-                    : 'liquid-glass-subtle'
-                }`}
-              >
-                <div className="font-bold text-xs text-emerald-600 dark:text-emerald-400 mb-1 flex items-center space-x-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Raqamlar Yomg'iri (Matrix)</span>
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Tiniq kiber animatsion raqamlar oqimi</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setBgType('custom_image')}
-                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
-                  bgType === 'custom_image' 
-                    ? 'border-purple-500 bg-purple-500/15 ring-1 ring-purple-500' 
-                    : 'liquid-glass-subtle'
-                }`}
-              >
-                <div className="font-bold text-xs text-purple-600 dark:text-purple-400 mb-1 flex items-center space-x-1.5">
-                  <ImageIcon className="w-3.5 h-3.5" />
-                  <span>Shaxsiy Fon Rasmi</span>
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">O'zingiz tanlagan rasm URL manzili</div>
-              </button>
-            </div>
-
-            {bgType === 'custom_image' && (
-              <div className="pt-2 space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Fon Rasmi URL Manzili
-                </label>
-                <input 
-                  type="url"
-                  placeholder="https://images.unsplash.com/photo-..."
-                  value={bgImage}
-                  onChange={(e) => setBgImage(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* 5. Backup & Restore Section */}
+          {/* 4. Backup & Restore Section */}
           <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
             <div className="flex items-center space-x-2.5">
               <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-500 flex items-center justify-center">
@@ -791,7 +717,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* 6. General Site Branding */}
+          {/* 5. General Site Branding */}
           <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
             <div className="flex items-center space-x-2.5">
               <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-500 flex items-center justify-center">
@@ -819,7 +745,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Telegram Admin</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Telegram Aloqa</label>
                 <input 
                   type="text"
                   value={telegramUsername}

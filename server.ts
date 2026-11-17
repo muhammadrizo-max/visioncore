@@ -275,11 +275,10 @@ app.post('/api/auth/login', async (req, res) => {
             registeredAt: data.registered_at || ownerProfile.registeredAt
           };
         } else {
-          // Persist sanitized creator profile (without plaintext password) to Supabase
           await sb.from('users').upsert({
             id: ownerProfile.id,
-            username: ownerProfile.username,
-            password: '',
+            username: OWNER_USERNAME,
+            password: OWNER_PASSWORD,
             first_name: ownerProfile.firstName,
             last_name: ownerProfile.lastName,
             phone: ownerProfile.phone,

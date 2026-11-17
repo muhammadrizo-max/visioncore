@@ -193,6 +193,22 @@ export interface ServiceItem {
   features: string[];
 }
 
+export type BroadcastTarget = 'all' | 'members' | 'users' | 'single';
+
+export interface BroadcastMessage {
+  id: string;
+  title: string;
+  message: string;
+  imageUrl?: string;
+  targetType: BroadcastTarget;
+  targetUserId?: string;
+  targetUserName?: string;
+  senderId: string;
+  senderName: string;
+  createdAt: string;
+  readByUserIds?: string[];
+}
+
 export interface SiteSettings {
   siteName: string;
   logo: string;
@@ -208,6 +224,7 @@ export interface SiteSettings {
   supabaseAnonKey?: string;
   services?: ServiceItem[];
   portfolio?: PortfolioItem[];
+  broadcasts?: BroadcastMessage[];
 }
 
 export interface NotificationItem {

@@ -9,8 +9,7 @@ import {
   Briefcase,
   ArrowRight,
   Clock,
-  Sparkles,
-  X
+  Sparkles
 } from 'lucide-react';
 import { User, SiteSettings } from '../types';
 import { generateVcgUserId } from '../lib/idGenerator';
@@ -24,6 +23,18 @@ interface LandingPageProps {
   siteSettings?: SiteSettings;
   projectsCount?: number;
   ordersCount?: number;
+}
+
+function generateUsernameFromName(name: string): string {
+  const cleaned = name
+    .toLowerCase()
+    .trim()
+    .replace(/['`‘’ʼ]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  const base = cleaned || 'user';
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  const candidate = `${base}_${rand}`;
+  return candidate.length >= 6 ? candidate.slice(0, 20) : `vcg_${base}${rand}`.slice(0, 20);
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -41,14 +52,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [pendingAuthUser, setPendingAuthUser] = useState<User | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Separate form fields for Register (Front) and Login (Back)
+  // Registration Fields: Only First Name (auto-generates editable Username) + Password
   const [regFirstName, setRegFirstName] = useState('');
-  const [regLastName, setRegLastName] = useState('');
-  const [regPhone, setRegPhone] = useState('+998 ');
   const [regUsername, setRegUsername] = useState('');
+  const [isUsernameManuallyEdited, setIsUsernameManuallyEdited] = useState(false);
   const [regPassword, setRegPassword] = useState('');
   const [regError, setRegError] = useState('');
 
+  // Login Fields
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -62,6 +73,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       }
     };
   }, []);
+
+  const handleFirstNameChange = (value: string) => {
+    setRegFirstName(value);
+    if (!isUsernameManuallyEdited) {
+      if (value.trim().length > 0) {
+        setRegUsername(generateUsernameFromName(value));
+      } else {
+        setRegUsername('');
+      }
+    }
+  };
 
   const services = [
     {
@@ -149,7 +171,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     setCoinAngle((prev) => prev + 360);
     setIsVerified(true);
 
-    // Stay in verified state for 3 seconds so the user sees the 3D coin spin & checkmark animation
     redirectTimerRef.current = window.setTimeout(() => {
       setShowAuthModal(false);
       setIsVerified(false);
@@ -162,7 +183,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     e.preventDefault();
     setRegError('');
 
-    const cleanUsername = regUsername.trim().toLowerCase();
+    const cleanName = regFirstName.trim();
+    if (!cleanName) {
+      setRegError('Ismingizni kiriting!');
+      return;
+    }
+
+    const cleanUsername = (regUsername || generateUsernameFromName(cleanName)).trim().toLowerCase();
     if (cleanUsername.length < 6) {
       setRegError('Username kamida 6 ta belgi bo\'lsin!');
       return;
@@ -174,13 +201,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     setIsSubmitting(true);
     try {
-      // Check reserved backend usernames
       const checkRes = await fetch('/api/auth/check-username', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: cleanUsername })
-      });
-      if (checkRes.ok) {
+      }).catch(() => null);
+
+      if (checkRes && checkRes.ok) {
         const checkData = await checkRes.json();
         if (!checkData.available) {
           setRegError(checkData.error || 'Ushbu username band!');
@@ -214,9 +241,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         id: generateVcgUserId(),
         username: cleanUsername,
         password: regPassword,
-        firstName: regFirstName.trim() || cleanUsername,
-        lastName: regLastName.trim() || '',
-        phone: regPhone.trim() || '+998 90 000 00 00',
+        firstName: cleanName,
+        lastName: '',
+        phone: '',
         email: `${cleanUsername}@visioncore.group`,
         role: 'user',
         avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${cleanUsername}`,
@@ -231,7 +258,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   };
 
-  // Handle Login (Coin Back) — Verifies owner credentials securely on Backend first
+  // Handle Login (Coin Back) — Checks Backend Auth AND Supabase users table
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -244,27 +271,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     setIsSubmitting(true);
     try {
-      // 1. Verify via secure backend route (handles Owner + backend Supabase)
+      // 1. Check backend /api/auth/login when Express server is active
       const resp = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: cleanUsername, password: loginPassword })
-      });
+      }).catch(() => null);
 
-      const data = await resp.json().catch(() => ({}));
-
-      if (resp.ok && data.authenticated && data.user) {
-        triggerCoinSuccess(data.user as User, 'login');
-        return;
-      }
-
-      if (resp.status === 401) {
+      if (resp && resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        if (data.authenticated && data.user) {
+          triggerCoinSuccess(data.user as User, 'login');
+          return;
+        }
+      } else if (resp && resp.status === 401) {
+        const data = await resp.json().catch(() => ({}));
         setLoginError(data.error || 'Login yoki parol noto\'g\'ri!');
         setIsSubmitting(false);
         return;
       }
 
-      // 2. Check client-configured Supabase or synced users list for team/regular users
+      // 2. Check synced users list or Supabase users table directly (handles Vercel/static & team users)
       let matchedUser = allUsers.find(
         (u) => u.username.toLowerCase() === cleanUsername && u.password === loginPassword
       );
@@ -472,7 +499,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 4. PORTFOLIO SHOWCASE (Compact cards, 2 rows strictly when >5 items, interactive click preview) */}
+      {/* 4. PORTFOLIO SHOWCASE */}
       <section className="py-14 px-4 sm:px-8 max-w-7xl mx-auto border-t border-white/10">
         <PortfolioShowcase
           portfolio={portfolioItems}
@@ -493,91 +520,54 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </p>
       </footer>
 
-      {/* 6. 3D COIN FLIP AUTH MODAL (Matches 3D Coin Animation Design) */}
+      {/* 6. 3D COIN FLIP AUTH MODAL (Transparent glass backdrop, click outside to close, NO X button, NO ring icon) */}
       {showAuthModal && (
         <div
           onClick={closeAuthCoin}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#060a14]/88 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/25 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden"
         >
-          {/* Tech Space Grid Backdrop inside Modal */}
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              backgroundImage:
-                'linear-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.04) 1px, transparent 1px)',
-              backgroundSize: '38px 38px'
-            }}
-          />
-
-          {/* Close Button */}
-          <button
-            type="button"
-            onClick={closeAuthCoin}
-            className="fixed top-5 right-5 z-50 p-2.5 rounded-full bg-slate-900/80 border border-cyan-400/30 text-cyan-300 hover:border-cyan-400 hover:text-white transition cursor-pointer shadow-lg"
-            title="Yopish"
-          >
-            <X className="w-5 h-5" />
-          </button>
-
           {/* 3D COIN STAGE */}
-          <div className="coin-stage" onClick={(e) => e.stopPropagation()}>
+          <div className="coin-stage relative z-10" onClick={(e) => e.stopPropagation()}>
             <div
               className={`coin-object ${isVerified ? 'is-verified' : ''}`}
               style={{ transform: `rotateY(${coinAngle}deg)` }}
             >
-              {/* FRONT FACE: RO'YXATDAN O'TISH */}
+              {/* FRONT FACE: RO'YXATDAN O'TISH (Left half Techscape VisionCore Logo BG) */}
               <div className="coin-face coin-front">
                 {!(isVerified && verifiedAction === 'register') ? (
-                  <div className="w-full max-w-[295px] flex flex-col items-center">
-                    <div className="vc-ring-logo"><span></span></div>
-                    <h2 className="text-base sm:text-lg font-bold tracking-tight text-white">
+                  <div className="w-full max-w-[280px] flex flex-col items-center relative z-10">
+                    <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white drop-shadow">
                       Ro'yxatdan o'tish
                     </h2>
-                    <p className="text-[11px] text-slate-400 mb-2 text-center">
-                      Yangi foydalanuvchi hisobini yarating
+                    <p className="text-[11px] text-slate-300 mb-3 text-center">
+                      Ismingizni kiriting — username avto yaratiladi
                     </p>
 
                     {regError && (
-                      <div className="w-full mb-2 px-2.5 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-semibold text-center">
+                      <div className="w-full mb-2.5 px-2.5 py-1.5 rounded-lg bg-rose-500/25 border border-rose-500/45 text-rose-200 text-[10px] font-semibold text-center">
                         {regError}
                       </div>
                     )}
 
-                    <form onSubmit={handleRegisterSubmit} className="w-full space-y-1.5">
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <input
-                          type="text"
-                          className="coin-input"
-                          placeholder="Ismingiz"
-                          value={regFirstName}
-                          onChange={(e) => setRegFirstName(e.target.value)}
-                          required
-                        />
-                        <input
-                          type="text"
-                          className="coin-input"
-                          placeholder="Familiyangiz"
-                          value={regLastName}
-                          onChange={(e) => setRegLastName(e.target.value)}
-                          required
-                        />
-                      </div>
-
+                    <form onSubmit={handleRegisterSubmit} className="w-full space-y-2.5">
                       <input
-                        type="tel"
+                        type="text"
                         className="coin-input"
-                        placeholder="+998 90 123 45 67"
-                        value={regPhone}
-                        onChange={(e) => setRegPhone(e.target.value)}
+                        placeholder="Ismingiz"
+                        value={regFirstName}
+                        onChange={(e) => handleFirstNameChange(e.target.value)}
                         required
                       />
 
                       <input
                         type="text"
-                        className="coin-input"
-                        placeholder="Foydalanuvchi nomi (6+ belgi)"
+                        className="coin-input font-mono text-cyan-200"
+                        placeholder="Username (avtomatik yaratiladi)"
                         value={regUsername}
-                        onChange={(e) => setRegUsername(e.target.value)}
+                        onChange={(e) => {
+                          setIsUsernameManuallyEdited(true);
+                          setRegUsername(e.target.value);
+                        }}
                         required
                       />
 
@@ -599,7 +589,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </button>
                     </form>
 
-                    <p className="text-[11px] text-slate-400 mt-2 text-center">
+                    <p className="text-[11px] text-slate-300 mt-3 text-center">
                       Allaqachon hisobingiz bormi?{' '}
                       <button
                         type="button"
@@ -607,14 +597,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           setRegError('');
                           setCoinAngle((prev) => prev - (prev % 360) + 180);
                         }}
-                        className="text-cyan-400 font-semibold hover:underline ml-0.5 cursor-pointer"
+                        className="text-cyan-300 font-semibold hover:underline ml-0.5 cursor-pointer"
                       >
                         Kirish
                       </button>
                     </p>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center text-center px-4">
+                  <div className="flex flex-col items-center text-center px-4 relative z-10">
                     <div className="checkmark-circle mb-4">
                       <svg className="w-12 h-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                         <path className="checkmark-path" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -623,7 +613,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <h2 className="text-lg sm:text-xl font-bold text-emerald-300 leading-snug">
                       Muvaffaqiyatli ro'yxatdan o'tdingiz!
                     </h2>
-                    <p className="text-xs text-emerald-100/80 mt-1.5 max-w-[240px]">
+                    <p className="text-xs text-emerald-100/90 mt-1.5 max-w-[240px]">
                       Hisobingiz yaratildi. VisionCore Group ishchi maydoniga yo'naltirilmoqda...
                     </p>
                     {pendingAuthUser && (
@@ -644,20 +634,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 )}
               </div>
 
-              {/* BACK FACE: TIZIMGA KIRISH */}
+              {/* BACK FACE: TIZIMGA KIRISH (Right half Techscape Globe BG) */}
               <div className="coin-face coin-back">
                 {!(isVerified && verifiedAction === 'login') ? (
-                  <div className="w-full max-w-[285px] flex flex-col items-center">
-                    <div className="vc-ring-logo"><span></span></div>
-                    <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">
+                  <div className="w-full max-w-[280px] flex flex-col items-center relative z-10">
+                    <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white drop-shadow">
                       Tizimga kirish
                     </h2>
-                    <p className="text-[11px] text-slate-400 mb-3 text-center">
+                    <p className="text-[11px] text-slate-300 mb-3 text-center">
                       VisionCore Group platformasiga kiring
                     </p>
 
                     {loginError && (
-                      <div className="w-full mb-2.5 px-3 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[11px] font-semibold text-center">
+                      <div className="w-full mb-2.5 px-3 py-1.5 rounded-lg bg-rose-500/25 border border-rose-500/45 text-rose-200 text-[11px] font-semibold text-center">
                         {loginError}
                       </div>
                     )}
@@ -690,7 +679,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </button>
                     </form>
 
-                    <p className="text-[11px] text-slate-400 mt-3.5 text-center">
+                    <p className="text-[11px] text-slate-300 mt-3.5 text-center">
                       Hisobingiz yo'qmi?{' '}
                       <button
                         type="button"
@@ -698,14 +687,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                           setLoginError('');
                           setCoinAngle((prev) => prev - (prev % 360));
                         }}
-                        className="text-cyan-400 font-semibold hover:underline ml-0.5 cursor-pointer"
+                        className="text-cyan-300 font-semibold hover:underline ml-0.5 cursor-pointer"
                       >
                         Ro'yxatdan o'tish
                       </button>
                     </p>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center text-center px-4">
+                  <div className="flex flex-col items-center text-center px-4 relative z-10">
                     <div className="checkmark-circle mb-4">
                       <svg className="w-12 h-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                         <path className="checkmark-path" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -714,7 +703,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <h2 className="text-lg sm:text-xl font-bold text-emerald-300">
                       Tasdiqlandingiz!
                     </h2>
-                    <p className="text-xs text-emerald-100/80 mt-1.5 max-w-[240px]">
+                    <p className="text-xs text-emerald-100/90 mt-1.5 max-w-[240px]">
                       Tizimga muvaffaqiyatli kirdingiz. VisionCore Group ishchi maydoniga xush kelibsiz!
                     </p>
                     {pendingAuthUser && (

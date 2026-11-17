@@ -13,7 +13,8 @@ import {
   Search,
   Cpu,
   GitBranch,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Megaphone
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -40,29 +41,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const menuList: { name: string; displayName: string; icon: any }[] = [];
 
-  if (user.role === 'creator' || user.role === 'engineer') {
+  if (user.role === 'creator') {
     menuList.push({ name: 'Bosh sahifa', displayName: 'Bosh sahifa', icon: LayoutDashboard });
     menuList.push({ name: 'Mijoz Buyurtmalari', displayName: 'Mijoz Buyurtmalari', icon: ShoppingBag });
     menuList.push({ name: 'A\'zolar', displayName: 'A\'zolar', icon: Users });
+    menuList.push({ name: 'Broadcast', displayName: 'Xabar tarqatish', icon: Megaphone });
+    menuList.push({ name: 'Loyihalar', displayName: 'Loyihalar', icon: FolderGit2 });
+    menuList.push({ name: 'Vazifalar', displayName: 'Vazifalar', icon: CheckSquare });
+    menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
+    menuList.push({ name: 'Note', displayName: 'Note (Qaydlar)', icon: StickyNote });
+  } else if (user.role === 'engineer') {
+    menuList.push({ name: 'Bosh sahifa', displayName: 'Bosh sahifa', icon: LayoutDashboard });
+    menuList.push({ name: 'Mijoz Buyurtmalari', displayName: 'Mijoz Buyurtmalari', icon: ShoppingBag });
     menuList.push({ name: 'Loyihalar', displayName: 'Loyihalar', icon: FolderGit2 });
     menuList.push({ name: 'Vazifalar', displayName: 'Vazifalar', icon: CheckSquare });
     menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
     menuList.push({ name: 'Note', displayName: 'Note (Qaydlar)', icon: StickyNote });
   } else if (user.role === 'researcher') {
     menuList.push({ name: 'Bosh sahifa', displayName: 'Bosh sahifa', icon: LayoutDashboard });
-    menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
+    menuList.push({ name: 'Mijoz Buyurtmalari', displayName: 'Mijoz Buyurtmalari', icon: ShoppingBag });
     menuList.push({ name: 'Aqlli qidiruv', displayName: 'Aqlli qidiruv', icon: Search });
+    menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
     menuList.push({ name: 'Note', displayName: 'Note (Qaydlar)', icon: StickyNote });
   } else if (user.role === 'designer') {
     menuList.push({ name: 'Bosh sahifa', displayName: 'Bosh sahifa', icon: LayoutDashboard });
-    menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
+    menuList.push({ name: 'Mijoz Buyurtmalari', displayName: 'Mijoz Buyurtmalari', icon: ShoppingBag });
     menuList.push({ name: 'Loyiha arxitekturasi', displayName: 'Loyiha arxitekturasi', icon: Cpu });
+    menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
     menuList.push({ name: 'Note', displayName: 'Note (Qaydlar)', icon: StickyNote });
   } else if (user.role === 'analyst') {
     menuList.push({ name: 'Bosh sahifa', displayName: 'Bosh sahifa', icon: LayoutDashboard });
-    menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
+    menuList.push({ name: 'Mijoz Buyurtmalari', displayName: 'Mijoz Buyurtmalari', icon: ShoppingBag });
     menuList.push({ name: 'Test Natijalari', displayName: 'Test Natijalari', icon: FileSpreadsheet });
     menuList.push({ name: 'Versiyalash & Rejalash', displayName: 'Versiyalash & Rejalash', icon: GitBranch });
+    menuList.push({ name: 'Chat', displayName: 'Suhbat (Chat)', icon: MessageSquare });
     menuList.push({ name: 'Note', displayName: 'Note (Qaydlar)', icon: StickyNote });
   } else {
     menuList.push({ name: 'Bosh sahifa', displayName: 'Bosh sahifa', icon: LayoutDashboard });

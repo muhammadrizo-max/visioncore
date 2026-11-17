@@ -17,7 +17,7 @@ interface EngineerPanelProps {
   darkMode: boolean;
 }
 
-type TeamRoleType = 'creator' | 'engineer' | 'researcher' | 'designer' | 'analyst';
+type TeamRoleType = 'engineer' | 'researcher' | 'designer' | 'analyst';
 
 export const EngineerPanel: React.FC<EngineerPanelProps> = ({
   currentUser,
@@ -64,7 +64,7 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
 
   const buildUsername = (r: TeamRoleType) => {
     const randomNum = Math.floor(10000 + Math.random() * 90000);
-    const rolePrefix = r === 'creator' ? 'creator' : r.substring(0, 3);
+    const rolePrefix = r.substring(0, 3);
     return `vcg-${rolePrefix}${randomNum}`;
   };
 
@@ -158,29 +158,31 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
           </p>
         </div>
 
-        <div className="flex liquid-glass p-1 rounded-2xl">
-          <button
-            id="engineer-tab-projects-btn"
-            onClick={() => setTab('projects')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
-              tab === 'projects' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300'
-            }`}
-          >
-            <FolderGit2 className="w-4 h-4" />
-            <span>Loyihalar va Kod ({projects.length})</span>
-          </button>
+        {currentUser.role === 'creator' && (
+          <div className="flex liquid-glass p-1 rounded-2xl">
+            <button
+              id="engineer-tab-projects-btn"
+              onClick={() => setTab('projects')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
+                tab === 'projects' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              <FolderGit2 className="w-4 h-4" />
+              <span>Loyihalar va Kod ({projects.length})</span>
+            </button>
 
-          <button
-            id="engineer-tab-members-btn"
-            onClick={() => setTab('addMember')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
-              tab === 'addMember' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300'
-            }`}
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>A'zo qo'shish</span>
-          </button>
-        </div>
+            <button
+              id="engineer-tab-members-btn"
+              onClick={() => setTab('addMember')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 cursor-pointer ${
+                tab === 'addMember' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-300'
+              }`}
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>A'zo qo'shish</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {tab === 'addMember' ? (
@@ -213,9 +215,8 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
                   }}
                   className="w-full px-4 py-3 rounded-xl liquid-glass-subtle text-xs font-bold text-blue-600 dark:text-blue-400 focus:outline-none"
                 >
-                  <option value="creator" className="bg-slate-900 text-white">Creator (Guruh Boshlig'i)</option>
+                  <option value="engineer" className="bg-slate-900 text-white">Engineer (Dasturchi / Guruh a'zosi)</option>
                   <option value="researcher" className="bg-slate-900 text-white">Researcher (Tadqiqotchi)</option>
-                  <option value="engineer" className="bg-slate-900 text-white">Engineer (Bosh muhandis)</option>
                   <option value="designer" className="bg-slate-900 text-white">Designer (Dizayner)</option>
                   <option value="analyst" className="bg-slate-900 text-white">Analyst (Tahlilchi)</option>
                 </select>
@@ -354,7 +355,6 @@ export const EngineerPanel: React.FC<EngineerPanelProps> = ({
                               onChange={(e) => setEditRole(e.target.value as RoleType)}
                               className="px-2 py-1 rounded liquid-glass-subtle text-xs"
                             >
-                              <option value="creator" className="bg-slate-900 text-white">creator</option>
                               <option value="researcher" className="bg-slate-900 text-white">researcher</option>
                               <option value="engineer" className="bg-slate-900 text-white">engineer</option>
                               <option value="designer" className="bg-slate-900 text-white">designer</option>

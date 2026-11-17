@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   UserCheck, 
   Camera, 
@@ -10,12 +10,16 @@ import {
   Check, 
   Copy, 
   User as UserIcon,
-  CheckCircle2
+  CheckCircle2,
+  Lock,
+  AlertCircle
 } from 'lucide-react';
 import { User } from '../types';
+import { readImageFileFromGallery } from '../lib/imageUtils';
 
 interface ProfileViewProps {
   user: User;
+  allUsers?: User[];
   onUpdateUser: (updatedUser: User) => void;
   onUpdateAvatar: (newAvatarUrl: string) => void;
   darkMode: boolean;
@@ -23,11 +27,13 @@ interface ProfileViewProps {
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
   user,
+  allUsers = [],
   onUpdateUser,
   onUpdateAvatar
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [username, setUsername] = useState(user.username || '');
   const [firstName, setFirstName] = useState(user.firstName || '');
   const [lastName, setLastName] = useState(user.lastName || '');
   const [phone, setPhone] = useState(user.phone || '');
@@ -35,16 +41,28 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [telegramUsername, setTelegramUsername] = useState(user.telegramUsername || '');
   const [copiedId, setCopiedId] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [profileError, setProfileError] = useState('');
 
-  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    setUsername(user.username || '');
+    setFirstName(user.firstName || '');
+    setLastName(user.lastName || '');
+    setPhone(user.phone || '');
+    setEmail(user.email || '');
+    setTelegramUsername(user.telegramUsername || '');
+  }, [user.id, user.username, user.firstName, user.lastName, user.phone, user.email, user.telegramUsername]);
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        onUpdateAvatar(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await readImageFileFromGallery(file, 600, 0.85);
+        onUpdateAvatar(compressed);
+      } catch {
+        // ignore
+      }
     }
+    e.target.value = '';
   };
 
   const handleCopyId = () => {
@@ -55,8 +73,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const handleSubmitProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    setProfileError('');
+    const cleanUsername = username.trim().toLowerCase();
+
+    if (cleanUsername.length < 4) {
+      setProfileError('Username kamida 4 ta belgidan iborat bo\'lishi kerak!');
+      return;
+    }
+
+    const duplicate = allUsers.some(
+      (u) => u.id !== user.id && u.username.toLowerCase() === cleanUsername
+    );
+    if (duplicate) {
+      setProfileError('Ushbu username boshqa foydalanuvchi tomonidan band qilingan!');
+      return;
+    }
+
     const updated: User = {
       ...user,
+      username: cleanUsername,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       phone: phone.trim(),
@@ -112,8 +147,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center justify-center sm:justify-start space-x-2 text-xs">
-              <span className="text-slate-600 dark:text-slate-400 font-mono">Maxsus ID:</span>
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-xs">
+              <span className="text-slate-600 dark:text-slate-400 font-mono flex items-center space-x-1">
+                <Lock className="w-3 h-3 text-slate-400" />
+                <span>Maxsus ID (o'zgarmas):</span>
+              </span>
               <span className="px-2.5 py-0.5 rounded-lg liquid-glass-subtle font-mono font-bold text-blue-600 dark:text-blue-400">
                 {user.id}
               </span>
@@ -139,6 +177,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
 
         </div>
+
+        {profileError && (
+          <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center space-x-2 animate-in fade-in duration-200">
+            <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0" />
+            <span>{profileError}</span>
+          </div>
+        )}
 
         {savedSuccess && (
           <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center space-x-2 animate-in fade-in duration-200">
@@ -223,12 +268,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div className="p-3.5 rounded-2xl liquid-glass-subtle space-y-1">
-              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center space-x-1">
+            <div className="p-3.5 rounded-2xl liquid-glass-subtle space-y-1.5">
+              <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center space-x-1">
                 <UserCheck className="w-3.5 h-3.5 text-blue-500" />
-                <span>Tizimdagi Username (o'zgarmas)</span>
-              </span>
-              <p className="font-mono font-bold text-xs text-slate-900 dark:text-slate-200">{user.username}</p>
+                <span>Tizimdagi Username (Tahrirlash mumkin)</span>
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                minLength={4}
+                className="w-full px-3 py-1.5 rounded-xl liquid-glass font-mono font-bold text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+              />
             </div>
 
             <div className="p-3.5 rounded-2xl liquid-glass-subtle space-y-1">

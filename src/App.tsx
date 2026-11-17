@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   User, Project, ChatMessage, Task, NoteItem, VersionPlan,
-  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, SiteSettings, Order, MemberActivity
+  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, SiteSettings, Order, MemberActivity, BroadcastMessage
 } from './types';
 import {
   INITIAL_USERS, INITIAL_SITE_SETTINGS
@@ -28,6 +28,7 @@ import { DesignerPanel } from './components/DesignerPanel';
 import { OrderView } from './components/OrderView';
 import { OrdersManagementView } from './components/OrdersManagementView';
 import { MembersView } from './components/MembersView';
+import { BroadcastView } from './components/BroadcastView';
 import { ProfileView } from './components/ProfileView';
 import { SettingsView } from './components/SettingsView';
 import { MatrixRain } from './components/MatrixRain';
@@ -142,7 +143,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_SITE_SETTINGS;
   });
 
-  const [supabaseConnected, setSupabaseConnected] = useState<boolean>(false);
   const [activeMenu, setActiveMenu] = useState<string>('Bosh sahifa');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
@@ -174,17 +174,13 @@ export default function App() {
     await loadBackendSupabaseEnv();
     const client = getSupabaseClient();
     if (!client) {
-      setSupabaseConnected(false);
       return false;
     }
 
     const data = await fetchAllFromSupabase();
     if (!data) {
-      setSupabaseConnected(false);
       return false;
     }
-
-    setSupabaseConnected(true);
 
     if (data.users && data.users.length > 0) {
       setUsers(data.users);
@@ -283,14 +279,18 @@ export default function App() {
 
   // Auth Handlers
   const handleLoginSuccess = (user: User) => {
+    const isNewRegistration = !users.some(u => u.id === user.id);
     setCurrentUser(user);
     setUsers(prev => {
       const exists = prev.some(u => u.id === user.id);
-      return exists ? prev : [...prev, user];
+      return exists ? prev.map(u => (u.id === user.id ? user : u)) : [...prev, user];
     });
     void sbSync.upsertUser(user);
     setActiveMenu('Bosh sahifa');
-    logActivity('Tizimga muvaffaqiyatli kirdi', user);
+    logActivity(isNewRegistration ? 'Platformada ro\'yxatdan o\'tdi' : 'Tizimga muvaffaqiyatli kirdi', user);
+    if (isNewRegistration && user.role === 'user') {
+      pushNotification(`Yangi user ro'yxatdan o'tdi: ${user.firstName || user.username} (${user.id})`);
+    }
   };
 
   const handleLogout = () => {
@@ -329,8 +329,9 @@ export default function App() {
     pushNotification(`Buyurtma holati yangilandi: "${updatedOrder.projectName}" → ${updatedOrder.status}`);
   };
 
-  // Members Handlers
+  // Members Handlers (Enforce single Creator rule)
   const handleAddMember = (newUser: User) => {
+    if (newUser.role === 'creator') return;
     setUsers(prev => [...prev, newUser]);
     void sbSync.upsertUser(newUser);
     logActivity(`Yangi guruh a'zosi qo'shildi: "${newUser.username}" (${newUser.role})`);
@@ -475,6 +476,41 @@ export default function App() {
     void sbSync.saveSiteSettings(nextSettings);
   };
 
+  // Broadcast Handlers (Creator only sends; recipients mark read)
+  const handleSendBroadcast = (bc: BroadcastMessage) => {
+    const nextBroadcasts = [bc, ...(siteSettings.broadcasts || [])];
+    handleUpdateSiteSettings({
+      ...siteSettings,
+      broadcasts: nextBroadcasts
+    });
+    logActivity(`Broadcast xabar yubordi: "${bc.title}" (${bc.targetType})`);
+  };
+
+  const handleDeleteBroadcast = (id: string) => {
+    const nextBroadcasts = (siteSettings.broadcasts || []).filter((b) => b.id !== id);
+    handleUpdateSiteSettings({
+      ...siteSettings,
+      broadcasts: nextBroadcasts
+    });
+  };
+
+  const handleMarkBroadcastRead = (broadcastId: string) => {
+    if (!currentUser) return;
+    const nextBroadcasts = (siteSettings.broadcasts || []).map((bc) => {
+      if (bc.id !== broadcastId) return bc;
+      const existing = bc.readByUserIds || [];
+      if (existing.includes(currentUser.id)) return bc;
+      return {
+        ...bc,
+        readByUserIds: [...existing, currentUser.id]
+      };
+    });
+    handleUpdateSiteSettings({
+      ...siteSettings,
+      broadcasts: nextBroadcasts
+    });
+  };
+
   // Specialist local handlers
   const handleSaveArchitecture = (doc: ArchitectureDoc) => {
     setArchitectureDocs(prev => {
@@ -544,36 +580,38 @@ export default function App() {
   }
 
   const isCreator = currentUser.role === 'creator';
-  const showMatrixRain =
-    (isCreator && siteSettings.creatorBackgroundType !== 'custom_image') ||
-    (!isCreator && siteSettings.creatorBackgroundType === 'matrix');
-  const customBgStyle =
-    isCreator && siteSettings.creatorBackgroundType === 'custom_image' && siteSettings.creatorBackgroundImage
-      ? {
-          backgroundImage: `url(${siteSettings.creatorBackgroundImage})`,
-          backgroundSize: 'cover',
-          backgroundAttachment: 'fixed',
-          backgroundPosition: 'center'
-        }
-      : undefined;
+  const bgMode = siteSettings.creatorBackgroundType || 'default';
+  const showCustomBg = isCreator && bgMode === 'custom_image' && Boolean(siteSettings.creatorBackgroundImage);
+  const showMatrixRain = bgMode === 'matrix';
 
   return (
     <div
-      style={customBgStyle}
       className={`h-screen max-h-screen overflow-hidden flex flex-col font-sans transition-colors relative ${
         darkMode
           ? 'bg-slate-950 text-slate-100'
           : 'bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 text-slate-900'
       }`}
     >
-      {/* Ambient Liquid-Glass Orbs so Glassmorphism shows crisp refraction in Light & Dark modes */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
-        <div className="absolute -top-32 -left-24 w-96 h-96 rounded-full bg-blue-500/20 dark:bg-blue-600/15 blur-3xl" />
-        <div className="absolute top-1/3 -right-24 w-96 h-96 rounded-full bg-indigo-500/20 dark:bg-purple-600/15 blur-3xl" />
-        <div className="absolute -bottom-32 left-1/3 w-96 h-96 rounded-full bg-cyan-400/20 dark:bg-emerald-500/10 blur-3xl" />
-      </div>
+      {/* Custom Uploaded Background Image Layer for Creator */}
+      {showCustomBg && (
+        <div
+          className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+          style={{ backgroundImage: `url(${siteSettings.creatorBackgroundImage})` }}
+        >
+          <div className={`absolute inset-0 ${darkMode ? 'bg-slate-950/55' : 'bg-white/35'}`} />
+        </div>
+      )}
 
-      {/* Digital Matrix Rain (Subtle in Light Mode so letters stay crisp, vivid in Dark Mode) */}
+      {/* Ambient Liquid-Glass Orbs */}
+      {!showCustomBg && (
+        <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
+          <div className="absolute -top-32 -left-24 w-96 h-96 rounded-full bg-blue-500/20 dark:bg-blue-600/15 blur-3xl" />
+          <div className="absolute top-1/3 -right-24 w-96 h-96 rounded-full bg-indigo-500/20 dark:bg-purple-600/15 blur-3xl" />
+          <div className="absolute -bottom-32 left-1/3 w-96 h-96 rounded-full bg-cyan-400/20 dark:bg-emerald-500/10 blur-3xl" />
+        </div>
+      )}
+
+      {/* Digital Matrix Rain (Active only when Matrix mode is selected) */}
       {showMatrixRain && (
         <MatrixRain
           opacity={darkMode ? 0.72 : 0.22}
@@ -591,8 +629,10 @@ export default function App() {
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         onNavigateMenu={setActiveMenu}
         notifications={notifications}
+        broadcasts={siteSettings.broadcasts || []}
         onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
         onClearNotifications={handleClearNotifications}
+        onMarkBroadcastRead={handleMarkBroadcastRead}
       />
 
       {/* Main Layout Container (Fixed left sidebar + independent scroll body) */}
@@ -618,16 +658,16 @@ export default function App() {
               tasks={tasks}
               activities={activities}
               siteSettings={siteSettings}
-              supabaseConnected={supabaseConnected}
               onAddReminder={handleAddReminder}
               onToggleReminder={handleToggleReminder}
               onDeleteReminder={handleDeleteReminder}
               onNavigateMenu={setActiveMenu}
+              onMarkBroadcastRead={handleMarkBroadcastRead}
               darkMode={darkMode}
             />
           )}
 
-          {activeMenu === 'Mijoz Buyurtmalari' && (
+          {activeMenu === 'Mijoz Buyurtmalari' && currentUser.role !== 'user' && (
             <OrdersManagementView
               orders={orders}
               allUsers={users}
@@ -637,7 +677,7 @@ export default function App() {
             />
           )}
 
-          {activeMenu === "A'zolar" && (
+          {activeMenu === "A'zolar" && isCreator && (
             <MembersView
               currentUser={currentUser}
               allUsers={users}
@@ -648,6 +688,16 @@ export default function App() {
               onUpdateMember={handleUpdateMember}
               onDeleteMember={handleDeleteMember}
               darkMode={darkMode}
+            />
+          )}
+
+          {activeMenu === 'Broadcast' && isCreator && (
+            <BroadcastView
+              currentUser={currentUser}
+              allUsers={users}
+              broadcasts={siteSettings.broadcasts || []}
+              onSendBroadcast={handleSendBroadcast}
+              onDeleteBroadcast={handleDeleteBroadcast}
             />
           )}
 
@@ -716,6 +766,7 @@ export default function App() {
           {(activeMenu === 'Profile' || activeMenu === 'Profil') && (
             <ProfileView
               user={currentUser}
+              allUsers={users}
               onUpdateUser={handleUpdateUser}
               onUpdateAvatar={handleUpdateAvatar}
               darkMode={darkMode}
@@ -735,8 +786,6 @@ export default function App() {
               tasks={tasks}
               notes={notes}
               onRestoreBackup={handleRestoreBackup}
-              onSyncSupabase={syncWithSupabase}
-              supabaseConnected={supabaseConnected}
             />
           )}
 
