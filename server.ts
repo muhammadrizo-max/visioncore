@@ -3,6 +3,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 import pg from 'pg';
 
 dotenv.config();
@@ -11,6 +12,19 @@ const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// Backend-only Owner credentials (never exposed in frontend bundle)
+const OWNER_USERNAME = (process.env.OWNER_USERNAME || 'visioncoreadmin07').trim().toLowerCase();
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'admin2603';
+const OWNER_ID = 'vcg-90000001';
+
+// Optional server-side Supabase client
+function getServerSupabase() {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const key = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+  if (!url || !key || !url.startsWith('http')) return null;
+  return createClient(url, key, { auth: { persistSession: false } });
+}
 
 // PostgreSQL Pool Initialization if DATABASE_URL is set
 let dbPool: pg.Pool | null = null;
@@ -30,7 +44,7 @@ if (process.env.DATABASE_URL) {
   }
 }
 
-// Research query handlers in native TypeScript
+// Research query handlers
 async function queryGemini(query: string, apiKey?: string): Promise<string> {
   const key = apiKey || process.env.GEMINI_API_KEY;
   if (!key) {
@@ -186,23 +200,12 @@ async function runSearchBackend(payload: { query: string; engine?: string }): Pr
   } else if (engine === 'firecrawl') {
     resultText = await queryFirecrawl(query, firecrawlKey);
   } else {
-    // ALL / AUTO engine mode
     const results: string[] = [];
-    if (tavilyKey) {
-      results.push(`### 🌐 Tavily (tavily.com)\n${await queryTavily(query, tavilyKey)}`);
-    }
-    if (serpapiKey) {
-      results.push(`### 🔍 SerpAPI (serpapi.com)\n${await querySerpApi(query, serpapiKey)}`);
-    }
-    if (geminiKey) {
-      results.push(`### ✨ Google Gemini (ai.google.dev)\n${await queryGemini(query, geminiKey)}`);
-    }
-    if (exaKey) {
-      results.push(`### ⚡ Exa AI (exa.ai)\n${await queryExa(query, exaKey)}`);
-    }
-    if (firecrawlKey) {
-      results.push(`### 🔥 Firecrawl (firecrawl.dev)\n${await queryFirecrawl(query, firecrawlKey)}`);
-    }
+    if (tavilyKey) results.push(`### 🌐 Tavily (tavily.com)\n${await queryTavily(query, tavilyKey)}`);
+    if (serpapiKey) results.push(`### 🔍 SerpAPI (serpapi.com)\n${await querySerpApi(query, serpapiKey)}`);
+    if (geminiKey) results.push(`### ✨ Google Gemini (ai.google.dev)\n${await queryGemini(query, geminiKey)}`);
+    if (exaKey) results.push(`### ⚡ Exa AI (exa.ai)\n${await queryExa(query, exaKey)}`);
+    if (firecrawlKey) results.push(`### 🔥 Firecrawl (firecrawl.dev)\n${await queryFirecrawl(query, firecrawlKey)}`);
 
     if (results.length > 0) {
       resultText = results.join('\n\n---\n\n');
@@ -223,17 +226,155 @@ async function runSearchBackend(payload: { query: string; engine?: string }): Pr
   return { text: resultText, engine };
 }
 
+// Secure Backend Authentication Route (Owner credentials strictly stored & checked on backend)
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  const cleanUsername = String(username || '').trim().toLowerCase();
+  const cleanPassword = String(password || '');
+
+  if (!cleanUsername || !cleanPassword) {
+    res.status(400).json({ authenticated: false, error: 'Login va parolni kiriting!' });
+    return;
+  }
+
+  // 1. Check Master Owner Credentials on Backend Only
+  if (cleanUsername === OWNER_USERNAME) {
+    if (cleanPassword !== OWNER_PASSWORD) {
+      res.status(401).json({ authenticated: false, error: 'Parol noto\'g\'ri kiritildi!' });
+      return;
+    }
+
+    let ownerProfile: any = {
+      id: OWNER_ID,
+      username: OWNER_USERNAME,
+      firstName: 'Boshliq',
+      lastName: '(Creator)',
+      phone: '+998 90 000 00 00',
+      email: 'creator@visioncore.group',
+      telegramUsername: '@visioncore_creator',
+      role: 'creator',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+      registeredAt: new Date().toISOString()
+    };
+
+    const sb = getServerSupabase();
+    if (sb) {
+      try {
+        const { data } = await sb.from('users').select('*').eq('id', OWNER_ID).maybeSingle();
+        if (data) {
+          ownerProfile = {
+            id: data.id,
+            username: data.username || OWNER_USERNAME,
+            firstName: data.first_name || 'Boshliq',
+            lastName: data.last_name || '(Creator)',
+            phone: data.phone || '+998 90 000 00 00',
+            email: data.email || 'creator@visioncore.group',
+            telegramUsername: data.telegram_username || '@visioncore_creator',
+            role: 'creator',
+            avatar: data.avatar || ownerProfile.avatar,
+            registeredAt: data.registered_at || ownerProfile.registeredAt
+          };
+        } else {
+          // Persist sanitized creator profile (without plaintext password) to Supabase
+          await sb.from('users').upsert({
+            id: ownerProfile.id,
+            username: ownerProfile.username,
+            password: '',
+            first_name: ownerProfile.firstName,
+            last_name: ownerProfile.lastName,
+            phone: ownerProfile.phone,
+            email: ownerProfile.email,
+            telegram_username: ownerProfile.telegramUsername,
+            role: 'creator',
+            avatar: ownerProfile.avatar,
+            registered_at: ownerProfile.registeredAt
+          });
+        }
+      } catch (err) {
+        console.warn('[Backend Auth] Supabase owner sync warning:', err);
+      }
+    }
+
+    res.json({ authenticated: true, user: ownerProfile });
+    return;
+  }
+
+  // 2. Check registered users in server-side Supabase if configured
+  const sb = getServerSupabase();
+  if (sb) {
+    try {
+      const { data } = await sb
+        .from('users')
+        .select('*')
+        .ilike('username', cleanUsername)
+        .maybeSingle();
+
+      if (data) {
+        if (data.password === cleanPassword) {
+          res.json({
+            authenticated: true,
+            user: {
+              id: data.id,
+              username: data.username,
+              firstName: data.first_name || '',
+              lastName: data.last_name || '',
+              phone: data.phone || '',
+              email: data.email || '',
+              telegramUsername: data.telegram_username || '',
+              role: data.role,
+              avatar: data.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${data.username}`,
+              registeredAt: data.registered_at
+            }
+          });
+          return;
+        } else {
+          res.status(401).json({ authenticated: false, error: 'Login yoki parol noto\'g\'ri kiritildi!' });
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Backend Auth] Supabase lookup warning:', err);
+    }
+  }
+
+  // Allow client-configured Supabase / local store check for non-owner users
+  res.json({ authenticated: false, checkClientStore: true });
+});
+
+// Reserve owner username on registration
+app.post('/api/auth/check-username', async (req, res) => {
+  const cleanUsername = String(req.body?.username || '').trim().toLowerCase();
+  if (!cleanUsername) {
+    res.status(400).json({ available: false, error: 'Foydalanuvchi nomi bo\'sh!' });
+    return;
+  }
+  if (cleanUsername === OWNER_USERNAME) {
+    res.json({ available: false, error: 'Ushbu foydalanuvchi nomi band!' });
+    return;
+  }
+  res.json({ available: true });
+});
+
+// Public Supabase env config bridge (returns public anon key only if set in backend env)
+app.get('/api/supabase/env', (_req, res) => {
+  const url = (process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+  const anonKey = (process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  res.json({
+    configured: Boolean(url && anonKey),
+    url,
+    anonKey
+  });
+});
+
 // Secure API route for smart AI-powered multi-engine research
 app.post('/api/ai-search', async (req, res) => {
   const { query, engine } = req.body;
-
   if (!query) {
     res.status(400).json({ error: 'Query is required' });
     return;
   }
-
   try {
-    const searchResult = await runSearchBackend({ query, engine: engine || 'perplexity' });
+    const searchResult = await runSearchBackend({ query, engine: engine || 'all' });
     res.json(searchResult);
   } catch (error: any) {
     console.error('API Search Error:', error);
@@ -241,20 +382,20 @@ app.post('/api/ai-search', async (req, res) => {
   }
 });
 
-// Serve health status
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    time: new Date(), 
+// Health status
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    time: new Date(),
     backend: 'Express & Node.js 22',
-    postgres: dbPool ? 'configured' : 'disabled'
+    postgres: dbPool ? 'configured' : 'disabled',
+    supabaseEnv: Boolean(getServerSupabase())
   });
 });
 
-// DB health status
-app.get('/api/db/health', async (req, res) => {
+app.get('/api/db/health', async (_req, res) => {
   if (!dbPool) {
-    res.json({ connected: false, message: 'DATABASE_URL env qoyilmagan (Localstorage rejimida)' });
+    res.json({ connected: false, message: 'DATABASE_URL env qoyilmagan' });
     return;
   }
   try {
@@ -267,10 +408,10 @@ app.get('/api/db/health', async (req, res) => {
   }
 });
 
-// Live Chat in-memory store for instant multi-user real-time sync
+// Live Chat in-memory store
 const liveChats: any[] = [];
 
-app.get('/api/chats', (req, res) => {
+app.get('/api/chats', (_req, res) => {
   res.json(liveChats);
 });
 
@@ -286,7 +427,6 @@ app.post('/api/chats', (req, res) => {
   } else {
     liveChats.push(msg);
   }
-  // Keep up to 500 recent messages
   if (liveChats.length > 500) {
     liveChats.splice(0, liveChats.length - 500);
   }
@@ -302,15 +442,14 @@ app.delete('/api/chats/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// Serve config with engineer credentials from environment
-app.get('/api/config', (req, res) => {
+// Public non-sensitive config
+app.get('/api/config', (_req, res) => {
   res.json({
-    engineerUsername: process.env.ENGINEER_USERNAME || 'vcg-admin',
-    engineerPassword: process.env.ENGINEER_PASSWORD || 'vcg_mcc2ro'
+    siteName: 'VisionCore Group',
+    authMode: 'backend'
   });
 });
 
-// Vite middleware configuration for full-stack integration
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -321,7 +460,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

@@ -9,6 +9,7 @@ import {
 import {
   getSupabaseClient,
   fetchAllFromSupabase,
+  loadBackendSupabaseEnv,
   sbSync
 } from './lib/supabase';
 
@@ -170,6 +171,7 @@ export default function App() {
 
   // Real Supabase Synchronization + Realtime Channel Subscription
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
+    await loadBackendSupabaseEnv();
     const client = getSupabaseClient();
     if (!client) {
       setSupabaseConnected(false);
@@ -184,19 +186,13 @@ export default function App() {
 
     setSupabaseConnected(true);
 
-    if (data.users) {
-      if (data.users.length > 0) {
-        setUsers(data.users);
-        // Keep active currentUser updated with latest role/avatar
-        setCurrentUser(prev => {
-          if (!prev) return null;
-          const fresh = data.users!.find(u => u.id === prev.id);
-          return fresh || prev;
-        });
-      } else {
-        // Ensure master creator is seeded in Supabase if table is empty
-        void sbSync.upsertUser(INITIAL_USERS[0]);
-      }
+    if (data.users && data.users.length > 0) {
+      setUsers(data.users);
+      setCurrentUser(prev => {
+        if (!prev) return null;
+        const fresh = data.users!.find(u => u.id === prev.id);
+        return fresh || prev;
+      });
     }
 
     if (data.orders) setOrders(data.orders);
@@ -577,10 +573,10 @@ export default function App() {
         <div className="absolute -bottom-32 left-1/3 w-96 h-96 rounded-full bg-cyan-400/20 dark:bg-emerald-500/10 blur-3xl" />
       </div>
 
-      {/* Digital Matrix Rain (Visible under liquid-glass cards in both dark and light modes) */}
+      {/* Digital Matrix Rain (Subtle in Light Mode so letters stay crisp, vivid in Dark Mode) */}
       {showMatrixRain && (
         <MatrixRain
-          opacity={darkMode ? 0.72 : 0.42}
+          opacity={darkMode ? 0.72 : 0.22}
           darkMode={darkMode}
         />
       )}

@@ -464,8 +464,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           <div className="pt-2">
             <PortfolioShowcase
               portfolio={siteSettings.portfolio || []}
-              marqueeEnabled={siteSettings.portfolioMarqueeEnabled !== undefined ? siteSettings.portfolioMarqueeEnabled : true}
               darkMode={darkMode}
+              onOrderSimilar={() => onNavigateMenu('Buyurtma berish')}
             />
           </div>
         </div>

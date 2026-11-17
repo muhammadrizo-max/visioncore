@@ -1,19 +1,20 @@
-import React, { useState } from 'react';
-import { 
-  Rocket, 
-  Shield, 
-  Bot, 
-  Globe, 
-  Layout, 
-  Smartphone, 
-  Briefcase, 
-  ArrowRight, 
-  Clock, 
-  Sparkles, 
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Rocket,
+  Shield,
+  Bot,
+  Globe,
+  Layout,
+  Smartphone,
+  Briefcase,
+  ArrowRight,
+  Clock,
+  Sparkles,
   X
 } from 'lucide-react';
 import { User, SiteSettings } from '../types';
 import { generateVcgUserId } from '../lib/idGenerator';
+import { getSupabaseClient } from '../lib/supabase';
 import { PortfolioShowcase } from './PortfolioShowcase';
 import { INITIAL_SITE_SETTINGS } from '../mockData';
 
@@ -32,17 +33,35 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   projectsCount = 0,
   ordersCount = 0
 }) => {
-  // Auth Modal State
+  // 3D Coin Auth Modal State
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [coinAngle, setCoinAngle] = useState<number>(0); // 0 = Register (front), 180 = Login (back)
+  const [isVerified, setIsVerified] = useState(false);
+  const [verifiedAction, setVerifiedAction] = useState<'login' | 'register'>('login');
+  const [pendingAuthUser, setPendingAuthUser] = useState<User | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form Fields
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('+998 ');
-  const [errorMsg, setErrorMsg] = useState('');
+  // Separate form fields for Register (Front) and Login (Back)
+  const [regFirstName, setRegFirstName] = useState('');
+  const [regLastName, setRegLastName] = useState('');
+  const [regPhone, setRegPhone] = useState('+998 ');
+  const [regUsername, setRegUsername] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regError, setRegError] = useState('');
+
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const redirectTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        window.clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
 
   const services = [
     {
@@ -101,58 +120,191 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   ];
 
-  // Auth Form Submit
-  const handleAuthSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
+  const openAuthCoin = (mode: 'register' | 'login') => {
+    if (redirectTimerRef.current) {
+      window.clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    }
+    setIsVerified(false);
+    setPendingAuthUser(null);
+    setRegError('');
+    setLoginError('');
+    setCoinAngle(mode === 'login' ? 180 : 0);
+    setShowAuthModal(true);
+  };
 
-    if (password.length < 6) {
-      setErrorMsg('Parol kamida 6 ta belgidan iborat bo\'lishi shart!');
+  const closeAuthCoin = () => {
+    if (redirectTimerRef.current) {
+      window.clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    }
+    setShowAuthModal(false);
+    setIsVerified(false);
+    setPendingAuthUser(null);
+  };
+
+  const triggerCoinSuccess = (authenticatedUser: User, action: 'login' | 'register') => {
+    setVerifiedAction(action);
+    setPendingAuthUser(authenticatedUser);
+    setCoinAngle((prev) => prev + 360);
+    setIsVerified(true);
+
+    // Stay in verified state for 3 seconds so the user sees the 3D coin spin & checkmark animation
+    redirectTimerRef.current = window.setTimeout(() => {
+      setShowAuthModal(false);
+      setIsVerified(false);
+      onLoginSuccess(authenticatedUser);
+    }, 3000);
+  };
+
+  // Handle Registration (Coin Front)
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRegError('');
+
+    const cleanUsername = regUsername.trim().toLowerCase();
+    if (cleanUsername.length < 6) {
+      setRegError('Username kamida 6 ta belgi bo\'lsin!');
+      return;
+    }
+    if (regPassword.length < 6) {
+      setRegError('Parol kamida 6 ta belgi bo\'lsin!');
       return;
     }
 
-    if (isRegisterMode) {
-      if (!username.trim()) {
-        setErrorMsg('Foydalanuvchi nomini kiriting!');
-        return;
+    setIsSubmitting(true);
+    try {
+      // Check reserved backend usernames
+      const checkRes = await fetch('/api/auth/check-username', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUsername })
+      });
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (!checkData.available) {
+          setRegError(checkData.error || 'Ushbu username band!');
+          setIsSubmitting(false);
+          return;
+        }
       }
-      if (username.trim().length < 6) {
-        setErrorMsg('Foydalanuvchi nomi kamida 6 ta belgidan iborat bo\'lishi tavsiya etiladi!');
-        return;
-      }
-      const finalUsername = username.toLowerCase().trim();
-      const exists = allUsers.some(u => u.username.toLowerCase() === finalUsername);
-      if (exists) {
-        setErrorMsg('Ushbu foydalanuvchi nomi allaqachon mavjud!');
+
+      const existsLocally = allUsers.some((u) => u.username.toLowerCase() === cleanUsername);
+      if (existsLocally) {
+        setRegError('Ushbu foydalanuvchi nomi mavjud!');
+        setIsSubmitting(false);
         return;
       }
 
-      const generatedId = generateVcgUserId();
+      const sb = getSupabaseClient();
+      if (sb) {
+        const { data: sbExisting } = await sb
+          .from('users')
+          .select('id')
+          .ilike('username', cleanUsername)
+          .maybeSingle();
+        if (sbExisting) {
+          setRegError('Ushbu foydalanuvchi nomi mavjud!');
+          setIsSubmitting(false);
+          return;
+        }
+      }
 
       const newUser: User = {
-        id: generatedId,
-        username: finalUsername,
-        password: password,
-        firstName: firstName.trim() || finalUsername,
-        lastName: lastName.trim() || '',
-        phone: phone.trim() || '+998 90 000 00 00',
-        email: `${finalUsername}@visioncore.group`,
+        id: generateVcgUserId(),
+        username: cleanUsername,
+        password: regPassword,
+        firstName: regFirstName.trim() || cleanUsername,
+        lastName: regLastName.trim() || '',
+        phone: regPhone.trim() || '+998 90 000 00 00',
+        email: `${cleanUsername}@visioncore.group`,
         role: 'user',
-        avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${finalUsername}`,
+        avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${cleanUsername}`,
         registeredAt: new Date().toISOString()
       };
 
-      onLoginSuccess(newUser);
-    } else {
-      const userFound = allUsers.find(
-        u => u.username.toLowerCase() === username.toLowerCase().trim() && u.password === password
+      triggerCoinSuccess(newUser, 'register');
+    } catch {
+      setRegError('Ro\'yxatdan o\'tishda xatolik yuz berdi!');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle Login (Coin Back) — Verifies owner credentials securely on Backend first
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+
+    const cleanUsername = loginUsername.trim().toLowerCase();
+    if (!cleanUsername || loginPassword.length < 6) {
+      setLoginError('Login va parol (kamida 6 belgi) kiriting!');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // 1. Verify via secure backend route (handles Owner + backend Supabase)
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUsername, password: loginPassword })
+      });
+
+      const data = await resp.json().catch(() => ({}));
+
+      if (resp.ok && data.authenticated && data.user) {
+        triggerCoinSuccess(data.user as User, 'login');
+        return;
+      }
+
+      if (resp.status === 401) {
+        setLoginError(data.error || 'Login yoki parol noto\'g\'ri!');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // 2. Check client-configured Supabase or synced users list for team/regular users
+      let matchedUser = allUsers.find(
+        (u) => u.username.toLowerCase() === cleanUsername && u.password === loginPassword
       );
 
-      if (userFound) {
-        onLoginSuccess(userFound);
-      } else {
-        setErrorMsg('Login yoki parol noto\'g\'ri kiritildi!');
+      if (!matchedUser) {
+        const sb = getSupabaseClient();
+        if (sb) {
+          const { data: sbRow } = await sb
+            .from('users')
+            .select('*')
+            .ilike('username', cleanUsername)
+            .maybeSingle();
+
+          if (sbRow && sbRow.password && sbRow.password === loginPassword) {
+            matchedUser = {
+              id: sbRow.id,
+              username: sbRow.username,
+              password: sbRow.password,
+              firstName: sbRow.first_name || '',
+              lastName: sbRow.last_name || '',
+              phone: sbRow.phone || '',
+              email: sbRow.email || '',
+              telegramUsername: sbRow.telegram_username || '',
+              role: sbRow.role,
+              avatar: sbRow.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${sbRow.username}`,
+              registeredAt: sbRow.registered_at
+            };
+          }
+        }
       }
+
+      if (matchedUser) {
+        triggerCoinSuccess(matchedUser, 'login');
+      } else {
+        setLoginError('Login yoki parol noto\'g\'ri kiritildi!');
+      }
+    } catch {
+      setLoginError('Server bilan bog\'lanishda xatolik!');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -164,7 +316,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-600 selection:text-white dark">
       
-      {/* 1. NAVBAR (Liquid Glass header, NO multi-language selector) */}
+      {/* 1. NAVBAR */}
       <header className="sticky top-0 z-40 w-full liquid-glass border-b border-white/10 px-4 sm:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-[0_0_20px_rgba(37,99,235,0.5)]">
@@ -182,22 +334,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => {
-              setIsRegisterMode(true);
-              setErrorMsg('');
-              setShowAuthModal(true);
-            }}
+            onClick={() => openAuthCoin('register')}
             className="hidden sm:inline-flex px-4 py-2 rounded-xl liquid-glass-subtle hover:border-blue-500/40 text-slate-200 font-bold text-xs transition cursor-pointer"
           >
             Ro'yxatdan o'tish
           </button>
 
           <button
-            onClick={() => {
-              setIsRegisterMode(false);
-              setErrorMsg('');
-              setShowAuthModal(true);
-            }}
+            onClick={() => openAuthCoin('login')}
             className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm transition shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 cursor-pointer"
           >
             Kirish
@@ -206,8 +350,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </header>
 
       {/* 2. HERO SECTION */}
-      <section className="relative overflow-hidden py-20 px-4 sm:px-8 max-w-7xl mx-auto text-center space-y-8">
-        
+      <section className="relative overflow-hidden py-16 sm:py-20 px-4 sm:px-8 max-w-7xl mx-auto text-center space-y-7">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-blue-600/15 rounded-full blur-[130px] pointer-events-none" />
 
         <div className="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-blue-600/15 border border-blue-500/30 backdrop-blur-md text-blue-400 text-xs font-bold">
@@ -229,10 +372,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
           <button
-            onClick={() => {
-              setIsRegisterMode(true);
-              setShowAuthModal(true);
-            }}
+            onClick={() => openAuthCoin('register')}
             className="px-8 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm transition shadow-[0_0_30px_rgba(37,99,235,0.4)] flex items-center space-x-2 active:scale-95 cursor-pointer"
           >
             <span>Loyiha Boshlash</span>
@@ -240,17 +380,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </button>
 
           <button
-            onClick={() => {
-              setIsRegisterMode(false);
-              setShowAuthModal(true);
-            }}
+            onClick={() => openAuthCoin('login')}
             className="px-8 py-4 rounded-2xl liquid-glass hover:border-blue-500/40 text-slate-200 font-bold text-sm transition active:scale-95 cursor-pointer"
           >
             <span>Virtual Ofisga Kirish</span>
           </button>
         </div>
 
-        {/* 100% Real System Counters (Zero fake claims) */}
+        {/* Real System Counters */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 max-w-4xl mx-auto border-t border-white/10">
           <div className="p-4 rounded-2xl liquid-glass space-y-1">
             <div className="text-2xl sm:text-3xl font-black text-blue-400">{portfolioItems.length} ta</div>
@@ -272,7 +409,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </section>
 
       {/* 3. SERVICES SECTION */}
-      <section className="py-16 px-4 sm:px-8 max-w-7xl mx-auto space-y-10">
+      <section className="py-14 px-4 sm:px-8 max-w-7xl mx-auto space-y-10">
         <div className="text-center space-y-3">
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
             Biz Nimalarni Taklif Qilamiz?
@@ -322,10 +459,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     <span>{srv.time}</span>
                   </span>
                   <button
-                    onClick={() => {
-                      setIsRegisterMode(true);
-                      setShowAuthModal(true);
-                    }}
+                    onClick={() => openAuthCoin('register')}
                     className="text-blue-400 font-bold hover:underline flex items-center space-x-1 cursor-pointer"
                   >
                     <span>Buyurtma</span>
@@ -338,12 +472,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* 4. PORTFOLIO SHOWCASE */}
-      <section className="py-16 px-4 sm:px-8 max-w-7xl mx-auto border-t border-white/10">
+      {/* 4. PORTFOLIO SHOWCASE (Compact cards, 2 rows strictly when >5 items, interactive click preview) */}
+      <section className="py-14 px-4 sm:px-8 max-w-7xl mx-auto border-t border-white/10">
         <PortfolioShowcase
           portfolio={portfolioItems}
-          marqueeEnabled={siteSettings?.portfolioMarqueeEnabled !== undefined ? siteSettings.portfolioMarqueeEnabled : true}
           darkMode={true}
+          onOrderSimilar={() => openAuthCoin('register')}
         />
       </section>
 
@@ -359,129 +493,251 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </p>
       </footer>
 
-      {/* 6. AUTH MODAL */}
+      {/* 6. 3D COIN FLIP AUTH MODAL (Matches 3D Coin Animation Design) */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in">
-          <div className="relative w-full max-w-md p-6 sm:p-8 rounded-3xl liquid-glass text-white space-y-5">
-            
-            <button
-              onClick={() => setShowAuthModal(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 cursor-pointer"
+        <div
+          onClick={closeAuthCoin}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#060a14]/88 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden"
+        >
+          {/* Tech Space Grid Backdrop inside Modal */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.04) 1px, transparent 1px)',
+              backgroundSize: '38px 38px'
+            }}
+          />
+
+          {/* Close Button */}
+          <button
+            type="button"
+            onClick={closeAuthCoin}
+            className="fixed top-5 right-5 z-50 p-2.5 rounded-full bg-slate-900/80 border border-cyan-400/30 text-cyan-300 hover:border-cyan-400 hover:text-white transition cursor-pointer shadow-lg"
+            title="Yopish"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* 3D COIN STAGE */}
+          <div className="coin-stage" onClick={(e) => e.stopPropagation()}>
+            <div
+              className={`coin-object ${isVerified ? 'is-verified' : ''}`}
+              style={{ transform: `rotateY(${coinAngle}deg)` }}
             >
-              <X className="w-5 h-5" />
-            </button>
+              {/* FRONT FACE: RO'YXATDAN O'TISH */}
+              <div className="coin-face coin-front">
+                {!(isVerified && verifiedAction === 'register') ? (
+                  <div className="w-full max-w-[295px] flex flex-col items-center">
+                    <div className="vc-ring-logo"><span></span></div>
+                    <h2 className="text-base sm:text-lg font-bold tracking-tight text-white">
+                      Ro'yxatdan o'tish
+                    </h2>
+                    <p className="text-[11px] text-slate-400 mb-2 text-center">
+                      Yangi foydalanuvchi hisobini yarating
+                    </p>
 
-            <div className="text-center space-y-1">
-              <div className="w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-400 mx-auto flex items-center justify-center font-bold">
-                <Shield className="w-6 h-6" />
-              </div>
-              <h3 className="text-xl font-black">
-                {isRegisterMode ? "Ro'yxatdan o'tish" : 'Tizimga kirish'}
-              </h3>
-              <p className="text-xs text-slate-400">
-                {isRegisterMode ? 'Yangi foydalanuvchi hisobini yarating' : 'VisionCore Group platformasiga kiring'}
-              </p>
-            </div>
+                    {regError && (
+                      <div className="w-full mb-2 px-2.5 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[10px] font-semibold text-center">
+                        {regError}
+                      </div>
+                    )}
 
-            {errorMsg && (
-              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-semibold">
-                {errorMsg}
-              </div>
-            )}
+                    <form onSubmit={handleRegisterSubmit} className="w-full space-y-1.5">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          type="text"
+                          className="coin-input"
+                          placeholder="Ismingiz"
+                          value={regFirstName}
+                          onChange={(e) => setRegFirstName(e.target.value)}
+                          required
+                        />
+                        <input
+                          type="text"
+                          className="coin-input"
+                          placeholder="Familiyangiz"
+                          value={regLastName}
+                          onChange={(e) => setRegLastName(e.target.value)}
+                          required
+                        />
+                      </div>
 
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
-              {isRegisterMode && (
-                <>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      placeholder="Ismingiz"
-                      value={firstName}
-                      onChange={e => setFirstName(e.target.value)}
-                      className="px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Familiyangiz"
-                      value={lastName}
-                      onChange={e => setLastName(e.target.value)}
-                      className="px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
-                    />
+                      <input
+                        type="tel"
+                        className="coin-input"
+                        placeholder="+998 90 123 45 67"
+                        value={regPhone}
+                        onChange={(e) => setRegPhone(e.target.value)}
+                        required
+                      />
+
+                      <input
+                        type="text"
+                        className="coin-input"
+                        placeholder="Foydalanuvchi nomi (6+ belgi)"
+                        value={regUsername}
+                        onChange={(e) => setRegUsername(e.target.value)}
+                        required
+                      />
+
+                      <input
+                        type="password"
+                        className="coin-input"
+                        placeholder="Parol (kamida 6 belgi)"
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        required
+                      />
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="coin-btn mt-1 disabled:opacity-60"
+                      >
+                        {isSubmitting ? 'Tekshirilmoqda...' : "Ro'yxatdan o'tish"}
+                      </button>
+                    </form>
+
+                    <p className="text-[11px] text-slate-400 mt-2 text-center">
+                      Allaqachon hisobingiz bormi?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRegError('');
+                          setCoinAngle((prev) => prev - (prev % 360) + 180);
+                        }}
+                        className="text-cyan-400 font-semibold hover:underline ml-0.5 cursor-pointer"
+                      >
+                        Kirish
+                      </button>
+                    </p>
                   </div>
-                  <input
-                    type="tel"
-                    placeholder="Telefon raqam (+998 90 ...)"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
-                  />
-                </>
-              )}
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">
-                  Foydalanuvchi nomi {isRegisterMode ? '(kamida 6 belgi tavsiya etiladi)' : ''}
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="masalan: vcg-creator yoki sardor99"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
-                />
+                ) : (
+                  <div className="flex flex-col items-center text-center px-4">
+                    <div className="checkmark-circle mb-4">
+                      <svg className="w-12 h-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                        <path className="checkmark-path" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-bold text-emerald-300 leading-snug">
+                      Muvaffaqiyatli ro'yxatdan o'tdingiz!
+                    </h2>
+                    <p className="text-xs text-emerald-100/80 mt-1.5 max-w-[240px]">
+                      Hisobingiz yaratildi. VisionCore Group ishchi maydoniga yo'naltirilmoqda...
+                    </p>
+                    {pendingAuthUser && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (redirectTimerRef.current) window.clearTimeout(redirectTimerRef.current);
+                          setShowAuthModal(false);
+                          setIsVerified(false);
+                          onLoginSuccess(pendingAuthUser);
+                        }}
+                        className="mt-4 px-4 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/20 border border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/30 transition cursor-pointer"
+                      >
+                        Darhol kirish
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">
-                  Parol (kamida 6 belgi, 8+ tavsiya etiladi)
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-500"
-                />
+              {/* BACK FACE: TIZIMGA KIRISH */}
+              <div className="coin-face coin-back">
+                {!(isVerified && verifiedAction === 'login') ? (
+                  <div className="w-full max-w-[285px] flex flex-col items-center">
+                    <div className="vc-ring-logo"><span></span></div>
+                    <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">
+                      Tizimga kirish
+                    </h2>
+                    <p className="text-[11px] text-slate-400 mb-3 text-center">
+                      VisionCore Group platformasiga kiring
+                    </p>
+
+                    {loginError && (
+                      <div className="w-full mb-2.5 px-3 py-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-300 text-[11px] font-semibold text-center">
+                        {loginError}
+                      </div>
+                    )}
+
+                    <form onSubmit={handleLoginSubmit} className="w-full space-y-2.5">
+                      <input
+                        type="text"
+                        className="coin-input"
+                        placeholder="Foydalanuvchi nomi"
+                        value={loginUsername}
+                        onChange={(e) => setLoginUsername(e.target.value)}
+                        required
+                      />
+
+                      <input
+                        type="password"
+                        className="coin-input"
+                        placeholder="Parol"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        required
+                      />
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="coin-btn mt-1 disabled:opacity-60"
+                      >
+                        {isSubmitting ? 'Tekshirilmoqda...' : 'Kirish'}
+                      </button>
+                    </form>
+
+                    <p className="text-[11px] text-slate-400 mt-3.5 text-center">
+                      Hisobingiz yo'qmi?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginError('');
+                          setCoinAngle((prev) => prev - (prev % 360));
+                        }}
+                        className="text-cyan-400 font-semibold hover:underline ml-0.5 cursor-pointer"
+                      >
+                        Ro'yxatdan o'tish
+                      </button>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-center px-4">
+                    <div className="checkmark-circle mb-4">
+                      <svg className="w-12 h-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                        <path className="checkmark-path" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-bold text-emerald-300">
+                      Tasdiqlandingiz!
+                    </h2>
+                    <p className="text-xs text-emerald-100/80 mt-1.5 max-w-[240px]">
+                      Tizimga muvaffaqiyatli kirdingiz. VisionCore Group ishchi maydoniga xush kelibsiz!
+                    </p>
+                    {pendingAuthUser && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (redirectTimerRef.current) window.clearTimeout(redirectTimerRef.current);
+                          setShowAuthModal(false);
+                          setIsVerified(false);
+                          onLoginSuccess(pendingAuthUser);
+                        }}
+                        className="mt-4 px-4 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/20 border border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/30 transition cursor-pointer"
+                      >
+                        Darhol kirish
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm transition shadow-lg active:scale-95 cursor-pointer"
-              >
-                {isRegisterMode ? "Ro'yxatdan o'tish" : 'Kirish'}
-              </button>
-            </form>
-
-            <div className="text-center pt-2 border-t border-white/10 text-xs text-slate-400">
-              {isRegisterMode ? (
-                <span>
-                  Allaqachon hisobingiz bormi?{' '}
-                  <button 
-                    onClick={() => { setIsRegisterMode(false); setErrorMsg(''); }}
-                    className="text-blue-400 font-bold hover:underline cursor-pointer"
-                  >
-                    Kirish
-                  </button>
-                </span>
-              ) : (
-                <span>
-                  Hisobingiz yo'qmi?{' '}
-                  <button 
-                    onClick={() => { setIsRegisterMode(true); setErrorMsg(''); }}
-                    className="text-blue-400 font-bold hover:underline cursor-pointer"
-                  >
-                    Ro'yxatdan o'tish
-                  </button>
-                </span>
-              )}
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 };

@@ -55,6 +55,23 @@ export function saveSupabaseConfig(url: string, anonKey: string) {
   }
 }
 
+export async function loadBackendSupabaseEnv(): Promise<boolean> {
+  const existing = getStoredSupabaseConfig();
+  if (existing.url && existing.anonKey) return true;
+  try {
+    const resp = await fetch('/api/supabase/env');
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    if (data?.configured && data.url && data.anonKey) {
+      saveSupabaseConfig(data.url, data.anonKey);
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 export function getSupabaseClient(customUrl?: string, customKey?: string): SupabaseClient | null {
   const config = getStoredSupabaseConfig();
   const url = (customUrl ?? config.url).trim().replace(/\/+$/, '');
@@ -345,10 +362,9 @@ export const sbSync = {
   async upsertUser(u: User) {
     const client = getSupabaseClient();
     if (!client) return;
-    await client.from('users').upsert({
+    const payload: Record<string, any> = {
       id: u.id,
       username: u.username,
-      password: u.password || '',
       first_name: u.firstName || '',
       last_name: u.lastName || '',
       phone: u.phone || '',
@@ -357,7 +373,11 @@ export const sbSync = {
       role: u.role,
       avatar: u.avatar || '',
       registered_at: u.registeredAt || new Date().toISOString()
-    });
+    };
+    if (u.password) {
+      payload.password = u.password;
+    }
+    await client.from('users').upsert(payload);
   },
   async deleteUser(userId: string) {
     const client = getSupabaseClient();
@@ -642,22 +662,7 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Boshliq (Creator) hisobini avtomatik yaratish
-INSERT INTO public.users (id, username, password, first_name, last_name, phone, email, telegram_username, role, avatar)
-VALUES (
-  'vcg-90000001',
-  'vcg-creator',
-  'vcg_mcc2ro',
-  'Boshliq',
-  '(Creator)',
-  '+998 90 000 00 00',
-  'creator@visioncore.group',
-  '@visioncore_creator',
-  'creator',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
-) ON CONFLICT (id) DO NOTHING;
-
--- Real-time & RLS ruxsatlari
+-- Real-time & RLS ruxsatlari (Boshliq hisobi backend orqali xavfsiz boshqariladi)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;

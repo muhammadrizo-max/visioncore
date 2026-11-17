@@ -546,7 +546,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
                               onChange={e => setEditPassword(e.target.value)} 
                               className="px-2 py-1 rounded liquid-glass-subtle text-xs" 
                             />
-                          ) : (
+                          ) : u.password ? (
                             <div className="flex items-center space-x-2">
                               <span>{isVisible ? u.password : '••••••••'}</span>
                               <button
@@ -555,15 +555,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
                               >
                                 {isVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                               </button>
-                              {u.password && (
-                                <button
-                                  onClick={() => handleCopy(u.password || '', `p-${u.id}`)}
-                                  className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                                >
-                                  {copiedId === `p-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                                </button>
-                              )}
+                              <button
+                                onClick={() => handleCopy(u.password || '', `p-${u.id}`)}
+                                className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                              >
+                                {copiedId === `p-${u.id}` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                              </button>
                             </div>
+                          ) : (
+                            <span className="text-[11px] font-sans font-semibold text-emerald-600 dark:text-emerald-400">
+                              Backend himoyalangan
+                            </span>
                           )}
                         </td>
 

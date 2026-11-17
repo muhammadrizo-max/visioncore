@@ -12,15 +12,13 @@ import {
   Copy, 
   Image as ImageIcon,
   CheckCircle2,
-  Plus,
-  Trash2,
-  Edit2,
-  ExternalLink,
-  Layers,
-  Play,
-  Pause,
-  RefreshCw,
-  CloudDownload
+  Plus, 
+  Trash2, 
+  Edit2, 
+  ExternalLink, 
+  Layers, 
+  RefreshCw, 
+  CloudDownload 
 } from 'lucide-react';
 import { User, SiteSettings, Order, Project, Task, NoteItem, PortfolioItem } from '../types';
 import {
@@ -601,25 +599,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     Portfolio va Qilingan Ishlar Boshqaruvi
                   </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Bosh sahifa va Landing pageda 2 qatorda aylanuvchi loyihalarni tahrirlash
+                    5 tadan ortiq loyiha bo'lganda avtomatik 2 qatorli aylanuvchi ko'rinishga o'tadi
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setMarqueeEnabled(!marqueeEnabled)}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer ${
-                    marqueeEnabled 
-                      ? 'bg-blue-600 text-white border-blue-500 shadow-sm' 
-                      : 'liquid-glass-subtle text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  {marqueeEnabled ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-                  <span>{marqueeEnabled ? 'Karusel harakati: Yoqilgan' : 'Karusel harakati: To\'xtatilgan'}</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={handleOpenAddPortfolio}

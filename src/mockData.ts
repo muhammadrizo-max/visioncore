@@ -3,23 +3,8 @@ import {
   TestReport, ArchitectureDoc, ReminderPlan, LogMessage, SiteSettings, Order, MemberActivity 
 } from './types';
 
-// Only the master Creator account is retained so the owner can log in
-export const INITIAL_USERS: User[] = [
-  {
-    id: 'vcg-90000001',
-    username: 'vcg-creator',
-    password: 'vcg_mcc2ro',
-    firstName: 'Boshliq',
-    lastName: '(Creator)',
-    phone: '+998 90 000 00 00',
-    email: 'creator@visioncore.group',
-    telegramUsername: '@visioncore_creator',
-    role: 'creator',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-    language: 'uz'
-  }
-];
+// Clean initial users array — owner credentials are verified strictly on backend
+export const INITIAL_USERS: User[] = [];
 
 // Clean - Zero dummy orders, projects, tasks, notes, or dummy activities
 export const INITIAL_ORDERS: Order[] = [];
