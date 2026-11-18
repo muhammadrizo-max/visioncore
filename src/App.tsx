@@ -6,12 +6,8 @@ import {
 import {
   INITIAL_USERS, INITIAL_SITE_SETTINGS
 } from './mockData';
-import {
-  getSupabaseClient,
-  fetchAllFromSupabase,
-  loadBackendSupabaseEnv,
-  sbSync
-} from './lib/supabase';
+import { fetchAllFromSupabase, sbSync } from './lib/supabase';
+import { getToken } from './lib/api';
 
 import { LandingPage } from './components/LandingPage';
 import { Header } from './components/Header';
@@ -171,11 +167,7 @@ export default function App() {
 
   // Real Supabase Synchronization + Realtime Channel Subscription
   const syncWithSupabase = useCallback(async (): Promise<boolean> => {
-    await loadBackendSupabaseEnv();
-    const client = getSupabaseClient();
-    if (!client) {
-      return false;
-    }
+    if (!getToken()) return false;
 
     const data = await fetchAllFromSupabase();
     if (!data) {
@@ -209,29 +201,10 @@ export default function App() {
     return true;
   }, []);
 
-  useEffect(() => {
-    void syncWithSupabase();
-
-    const client = getSupabaseClient();
-    if (!client) return;
-
-    const channel = client
-      .channel('visioncore-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chats' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => { void syncWithSupabase(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_settings' }, () => { void syncWithSupabase(); })
-      .subscribe();
-
-    return () => {
-      void client.removeChannel(channel);
-    };
-  }, [syncWithSupabase]);
+  const handleClearNotifications = () => {
+    setNotifications([]);
+    void sbSync.clearNotifications();
+  };
 
   // Activity logger helper
   const logActivity = (action: string, actor?: User) => {
@@ -333,7 +306,7 @@ export default function App() {
   const handleAddMember = (newUser: User) => {
     if (newUser.role === 'creator') return;
     setUsers(prev => [...prev, newUser]);
-    void sbSync.upsertUser(newUser);
+    void sbSync.createMember(newUser);
     logActivity(`Yangi guruh a'zosi qo'shildi: "${newUser.username}" (${newUser.role})`);
     pushNotification(`Yangi a'zo qo'shildi: ${newUser.firstName || newUser.username} (${newUser.role})`);
   };
