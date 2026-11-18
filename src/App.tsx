@@ -649,7 +649,6 @@ export default function App() {
               activities={activities}
               tasks={tasks}
               orders={orders}
-              onAddMember={handleAddMember}
               onUpdateMember={handleUpdateMember}
               onDeleteMember={handleDeleteMember}
               darkMode={darkMode}
