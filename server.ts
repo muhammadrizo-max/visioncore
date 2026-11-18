@@ -5,7 +5,6 @@ import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
-import pg from 'pg';
 
 dotenv.config();
 
@@ -14,27 +13,37 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const SESSION_SECRET = process.env.SESSION_SECRET ?? '';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const PROVIDER_TIMEOUT_MS = 15_000;
-const MAX_CHAT_MESSAGES = 500;
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
 const USERNAME_RE = /^[a-z0-9_.-]{3,32}$/;
+const MEMBER_ID_RE = /^vcg[-_]\d{8}$/;
+const ROLES = ['engineer', 'researcher', 'designer', 'analyst', 'user'];
+const OWNER_ID = 'vcg-90000001';
 
-if (SESSION_SECRET.length < 32) {
-  throw new Error("SESSION_SECRET kamida 32 belgidan iborat bo'lishi kerak");
-}
+if (SESSION_SECRET.length < 32) throw new Error("SESSION_SECRET kamida 32 belgidan iborat bo'lishi kerak");
 
 const env = (name: string) => process.env[name]?.trim() || undefined;
 const normalizeUsername = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
+const str = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+const ilikeEscape = (v: string) => v.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+const SUPABASE_URL = (env('SUPABASE_URL') ?? '').replace(/\/+$/, '');
+const SUPABASE_SERVICE_KEY = env('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+if (!SUPABASE_URL.startsWith('http') || !SUPABASE_SERVICE_KEY) {
+  throw new Error('SUPABASE_URL va SUPABASE_SERVICE_ROLE_KEY sozlanishi shart');
+}
+const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '200kb' }));
 
-// ---------- Password hashing (scrypt, no extra dependency) ----------
+// ---------- Parol xeshlash ----------
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt$${salt}$${hash}`;
+  return `scrypt$${salt}$${crypto.scryptSync(password, salt, 64).toString('hex')}`;
 }
 
 function verifyPassword(password: string, stored: string): boolean {
@@ -53,13 +62,12 @@ const safeEqual = (a: string, b: string) => {
 
 const DUMMY_HASH = hashPassword('timing-equalizer');
 
-// ---------- Owner (credentials only from env) ----------
+// ---------- Owner (faqat env orqali) ----------
 const OWNER_USERNAME = normalizeUsername(env('OWNER_USERNAME') ?? '');
 const OWNER_PASSWORD_HASH = env('OWNER_PASSWORD') ? hashPassword(env('OWNER_PASSWORD')!) : null;
 const OWNER_ENABLED = Boolean(OWNER_USERNAME && OWNER_PASSWORD_HASH);
-const OWNER_ID = 'vcg-90000001';
 
-// ---------- Signed session tokens (HMAC-SHA256) ----------
+// ---------- Token (HMAC-SHA256) ----------
 interface Session { sub: string; username: string; role: string; exp: number; }
 type AuthedRequest = Request & { session: Session };
 
@@ -83,9 +91,13 @@ function verifyToken(token: string): Session | null {
   }
 }
 
-function requireAuth(req: Request, res: Response, next: NextFunction) {
+const sessionFrom = (req: Request): Session | null => {
   const header = req.headers.authorization ?? '';
-  const session = header.startsWith('Bearer ') ? verifyToken(header.slice(7)) : null;
+  return header.startsWith('Bearer ') ? verifyToken(header.slice(7)) : null;
+};
+
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const session = sessionFrom(req);
   if (!session) {
     res.status(401).json({ error: 'Avtorizatsiya talab qilinadi' });
     return;
@@ -96,7 +108,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 
 const sessionOf = (req: Request) => (req as AuthedRequest).session;
 
-// ---------- In-memory rate limiter ----------
+// ---------- Rate limiter ----------
 function rateLimit(windowMs: number, max: number) {
   const hits = new Map<string, { count: number; reset: number }>();
   setInterval(() => {
@@ -123,6 +135,7 @@ function rateLimit(windowMs: number, max: number) {
 }
 
 const loginLimiter = rateLimit(15 * 60 * 1000, 10);
+const registerLimiter = rateLimit(15 * 60 * 1000, 20);
 const checkUsernameLimiter = rateLimit(60 * 1000, 30);
 const searchLimiter = rateLimit(60 * 1000, 20);
 
@@ -132,15 +145,7 @@ const asyncRoute =
     fn(req, res).catch(next);
   };
 
-// ---------- Supabase ----------
-const SUPABASE_URL = (env('SUPABASE_URL') || env('VITE_SUPABASE_URL') || '').replace(/\/+$/, '');
-const SUPABASE_ANON_KEY = env('VITE_SUPABASE_ANON_KEY') || env('SUPABASE_ANON_KEY') || '';
-const SUPABASE_SERVER_KEY = env('SUPABASE_SERVICE_ROLE_KEY') || SUPABASE_ANON_KEY;
-const supabase =
-  SUPABASE_URL.startsWith('http') && SUPABASE_SERVER_KEY
-    ? createClient(SUPABASE_URL, SUPABASE_SERVER_KEY, { auth: { persistSession: false } })
-    : null;
-
+// ---------- Foydalanuvchi ----------
 interface UserRow {
   id: string;
   username: string;
@@ -153,23 +158,10 @@ interface UserRow {
   telegram_username?: string | null;
   role: string;
   avatar?: string | null;
-  registered_at?: string | null;
+  created_at?: string | null;
 }
 
-interface PublicUser {
-  id: string;
-  username: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  telegramUsername: string;
-  role: string;
-  avatar: string;
-  registeredAt: string | null;
-}
-
-const toPublicUser = (row: UserRow, role?: string): PublicUser => ({
+const toPublicUser = (row: UserRow) => ({
   id: row.id,
   username: row.username,
   firstName: row.first_name ?? '',
@@ -177,117 +169,326 @@ const toPublicUser = (row: UserRow, role?: string): PublicUser => ({
   phone: row.phone ?? '',
   email: row.email ?? '',
   telegramUsername: row.telegram_username ?? '',
-  role: role ?? row.role,
+  role: row.role,
   avatar: row.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(row.username)}`,
-  registeredAt: row.registered_at ?? null,
+  registeredAt: row.created_at ?? null,
 });
 
-const issueToken = (user: PublicUser) =>
+const issueToken = (user: ReturnType<typeof toPublicUser>) =>
   signToken({ sub: user.id, username: user.username, role: user.role, exp: Date.now() + SESSION_TTL_MS });
 
-async function loadOwnerProfile(): Promise<PublicUser> {
-  const fallback: PublicUser = {
-    id: OWNER_ID,
-    username: OWNER_USERNAME,
-    firstName: 'Boshliq',
-    lastName: '(Creator)',
-    phone: '+998 90 000 00 00',
-    email: 'creator@visioncore.group',
-    telegramUsername: '@visioncore_creator',
-    role: 'creator',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    registeredAt: new Date().toISOString(),
-  };
-  if (!supabase) return fallback;
-  try {
-    const { data } = await supabase.from('users').select('*').eq('id', OWNER_ID).maybeSingle();
-    if (!data) {
-      await supabase.from('users').upsert({
-        id: OWNER_ID,
-        username: OWNER_USERNAME,
-        first_name: fallback.firstName,
-        last_name: fallback.lastName,
-        phone: fallback.phone,
-        email: fallback.email,
-        telegram_username: fallback.telegramUsername,
-        role: 'creator',
-        avatar: fallback.avatar,
-        registered_at: fallback.registeredAt,
-      });
-      return fallback;
-    }
-    return { ...fallback, ...toPublicUser(data as UserRow, 'creator') };
-  } catch (err) {
-    console.warn('[auth] owner profile load failed:', err);
-    return fallback;
-  }
-}
-
-// ---------- PostgreSQL + chat storage ----------
-const dbUrl = env('DATABASE_URL');
-const dbPool = dbUrl
-  ? new pg.Pool({
-      connectionString: dbUrl,
-      ssl: /localhost|127\.0\.0\.1/.test(dbUrl)
-        ? false
-        : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' },
+async function ensureOwnerRow(): Promise<UserRow> {
+  const { data } = await db.from('users').select('*').eq('id', OWNER_ID).maybeSingle();
+  if (data) return data as UserRow;
+  const { data: created, error } = await db
+    .from('users')
+    .insert({
+      id: OWNER_ID,
+      username: OWNER_USERNAME,
+      role: 'creator',
+      first_name: 'Boshliq',
+      last_name: '(Creator)',
+      phone: '+998 90 000 00 00',
+      email: 'creator@visioncore.group',
+      telegram_username: '@visioncore_creator',
+      avatar: '',
+      created_at: new Date().toISOString(),
     })
-  : null;
-dbPool?.on('error', (err) => console.warn('[PostgreSQL] idle client error:', err.message));
-
-type ChatMessage = Record<string, unknown> & { id: string };
-const memoryChats: ChatMessage[] = [];
-
-async function initDb() {
-  if (!dbPool) return;
-  await dbPool.query(`
-    CREATE TABLE IF NOT EXISTS chat_messages (
-      id TEXT PRIMARY KEY,
-      payload JSONB NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )`);
+    .select('*')
+    .single();
+  if (error) throw error;
+  return created as UserRow;
 }
 
-async function listChats(): Promise<ChatMessage[]> {
-  if (!dbPool) return memoryChats;
-  const { rows } = await dbPool.query<{ payload: ChatMessage }>(
-    `SELECT payload FROM (
-       SELECT payload, created_at FROM chat_messages ORDER BY created_at DESC LIMIT $1
-     ) recent ORDER BY created_at ASC`,
-    [MAX_CHAT_MESSAGES],
-  );
-  return rows.map((r) => r.payload);
+// ---------- Jadval siyosati (frontend ma'lumotlari uchun) ----------
+interface TableCfg {
+  columns: string[];
+  order: string;
+  asc?: boolean;
+  limit?: number;
+  owner?: string;
+  strict?: boolean;
+  creatorOnlyDelete?: boolean;
 }
 
-async function saveChat(msg: ChatMessage) {
-  if (!dbPool) {
-    const idx = memoryChats.findIndex((m) => m.id === msg.id);
-    if (idx >= 0) memoryChats[idx] = msg;
-    else memoryChats.push(msg);
-    if (memoryChats.length > MAX_CHAT_MESSAGES) memoryChats.splice(0, memoryChats.length - MAX_CHAT_MESSAGES);
+const TABLES: Record<string, TableCfg> = {
+  users: {
+    columns: ['id', 'username', 'first_name', 'last_name', 'phone', 'email', 'telegram_username', 'role', 'avatar', 'created_at'],
+    order: 'created_at',
+    creatorOnlyDelete: true,
+  },
+  orders: {
+    columns: ['id', 'user_id', 'client_name', 'client_phone', 'client_telegram', 'project_type', 'project_name', 'description', 'budget', 'deadline', 'status', 'admin_notes', 'accepted_by_id', 'accepted_by_name', 'assigned_member_id', 'assigned_member_name', 'created_at'],
+    order: 'created_at',
+  },
+  projects: {
+    columns: ['id', 'name', 'description', 'status', 'version'],
+    order: 'id',
+    asc: true,
+    creatorOnlyDelete: true,
+  },
+  tasks: {
+    columns: ['id', 'title', 'description', 'completed', 'created_by_id', 'created_by_name', 'assigned_to_id', 'assigned_to_name', 'date'],
+    order: 'date',
+  },
+  notes: {
+    columns: ['id', 'title', 'content', 'is_private', 'author_id', 'author_name', 'category', 'created_at'],
+    order: 'created_at',
+    owner: 'author_id',
+    strict: true,
+  },
+  chats: {
+    columns: ['id', 'sender_id', 'sender_name', 'sender_role', 'sender_avatar', 'text', 'timestamp_label', 'chat_id', 'attachment_url', 'is_edited', 'audio_url', 'audio_duration', 'created_at'],
+    order: 'created_at',
+    asc: true,
+    owner: 'sender_id',
+    strict: true,
+  },
+  reminders: {
+    columns: ['id', 'user_id', 'title', 'date', 'completed'],
+    order: 'id',
+    asc: true,
+    owner: 'user_id',
+    strict: true,
+  },
+  activities: {
+    columns: ['id', 'user_id', 'user_name', 'user_role', 'action', 'target', 'timestamp'],
+    order: 'timestamp',
+    limit: 200,
+  },
+  notifications: {
+    columns: ['id', 'message', 'read', 'time_label', 'created_at'],
+    order: 'created_at',
+    limit: 100,
+  },
+  site_settings: {
+    columns: ['id', 'data', 'updated_at'],
+    order: 'id',
+    asc: true,
+  },
+};
+
+const errorBody = (res: Response, status: number, error: string) => {
+  res.status(status).json({ error });
+};
+
+// ---------- Auth ----------
+app.post('/api/auth/login', loginLimiter, asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body?.username);
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const fail = () => errorBody(res, 401, "Login yoki parol noto'g'ri kiritildi!");
+
+  if (!USERNAME_RE.test(username) || !password || password.length > 200) {
+    errorBody(res, 400, "Login va parolni to'g'ri kiriting!");
     return;
   }
-  await dbPool.query(
-    `INSERT INTO chat_messages (id, payload) VALUES ($1, $2::jsonb)
-     ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload`,
-    [msg.id, JSON.stringify(msg)],
-  );
-  await dbPool.query(
-    `DELETE FROM chat_messages WHERE id IN (
-       SELECT id FROM chat_messages ORDER BY created_at DESC OFFSET $1
-     )`,
-    [MAX_CHAT_MESSAGES],
-  );
-}
 
-async function deleteChat(id: string) {
-  if (!dbPool) {
-    const idx = memoryChats.findIndex((m) => m.id === id);
-    if (idx >= 0) memoryChats.splice(idx, 1);
+  if (OWNER_ENABLED && username === OWNER_USERNAME) {
+    if (!verifyPassword(password, OWNER_PASSWORD_HASH!)) { fail(); return; }
+    const user = toPublicUser(await ensureOwnerRow());
+    res.json({ authenticated: true, token: issueToken(user), user });
     return;
   }
-  await dbPool.query('DELETE FROM chat_messages WHERE id = $1', [id]);
-}
+
+  const { data } = await db.from('users').select('*').ilike('username', ilikeEscape(username)).maybeSingle();
+  const row = data as UserRow | null;
+  if (!row) {
+    verifyPassword(password, DUMMY_HASH);
+    fail();
+    return;
+  }
+
+  let valid = false;
+  if (row.password_hash) {
+    valid = verifyPassword(password, row.password_hash);
+  } else if (row.password) {
+    valid = safeEqual(password, row.password);
+    if (valid) {
+      await db.from('users').update({ password_hash: hashPassword(password), password: null }).eq('id', row.id);
+    }
+  }
+  if (!valid) { fail(); return; }
+
+  const user = toPublicUser(row);
+  res.json({ authenticated: true, token: issueToken(user), user });
+}));
+
+app.post('/api/auth/register', registerLimiter, asyncRoute(async (req, res) => {
+  const session = sessionFrom(req);
+  const asCreator = session?.role === 'creator';
+  const username = normalizeUsername(req.body?.username);
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const firstName = str(req.body?.firstName, 100);
+
+  if (!firstName || !USERNAME_RE.test(username) || password.length < 6 || password.length > 200) {
+    errorBody(res, 400, 'Ism, username (3–32 belgi) va parol (6+ belgi) kiritilishi shart');
+    return;
+  }
+  if (OWNER_ENABLED && username === OWNER_USERNAME) {
+    errorBody(res, 409, 'Ushbu foydalanuvchi nomi mavjud!');
+    return;
+  }
+
+  const { data: taken } = await db.from('users').select('id').ilike('username', ilikeEscape(username)).maybeSingle();
+  if (taken) {
+    errorBody(res, 409, 'Ushbu foydalanuvchi nomi mavjud!');
+    return;
+  }
+
+  const role = asCreator && ROLES.includes(req.body?.role) ? req.body.role : 'user';
+  const requestedId = typeof req.body?.id === 'string' && MEMBER_ID_RE.test(req.body.id) ? req.body.id : null;
+  const id = requestedId ?? `vcg-${crypto.randomInt(10_000_000, 100_000_000)}`;
+
+  const { data, error } = await db
+    .from('users')
+    .insert({
+      id,
+      username,
+      password_hash: hashPassword(password),
+      password: null,
+      first_name: firstName,
+      last_name: str(req.body?.lastName, 100),
+      phone: str(req.body?.phone, 50),
+      email: str(req.body?.email, 150) || `${username}@visioncore.group`,
+      telegram_username: str(req.body?.telegramUsername, 100),
+      role,
+      avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${username}`,
+      created_at: new Date().toISOString(),
+    })
+    .select('*')
+    .single();
+
+  if (error) {
+    if ((error as { code?: string }).code === '23505') {
+      errorBody(res, 409, 'Ushbu ID yoki username band');
+      return;
+    }
+    throw error;
+  }
+
+  const user = toPublicUser(data as UserRow);
+  if (asCreator) {
+    res.status(201).json({ user });
+    return;
+  }
+  res.status(201).json({ authenticated: true, token: issueToken(user), user });
+}));
+
+app.post('/api/auth/check-username', checkUsernameLimiter, asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body?.username);
+  if (!USERNAME_RE.test(username)) {
+    errorBody(res, 400, "Foydalanuvchi nomi 3–32 ta harf, raqam yoki _ . - belgilaridan iborat bo'lishi kerak");
+    return;
+  }
+  const ownerTaken = OWNER_ENABLED && username === OWNER_USERNAME;
+  const { data } = await db.from('users').select('id').ilike('username', ilikeEscape(username)).maybeSingle();
+  if (ownerTaken || data) {
+    res.json({ available: false, error: 'Ushbu foydalanuvchi nomi band!' });
+    return;
+  }
+  res.json({ available: true });
+}));
+
+// ---------- Ma'lumotlar ----------
+app.get('/api/db/health', asyncRoute(async (_req, res) => {
+  const start = Date.now();
+  const { error } = await db.from('site_settings').select('id').limit(1);
+  if (error) {
+    console.error('[db/health]', error);
+    errorBody(res, 503, "Supabase bilan bog'lanishda xatolik");
+    return;
+  }
+  res.json({
+    connected: true,
+    latencyMs: Date.now() - start,
+    message: 'Supabase PostgreSQL bazasiga real-time ulandi!',
+    lastChecked: new Date().toLocaleTimeString('uz-UZ'),
+  });
+}));
+
+app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
+  const s = sessionOf(req);
+  const entries = await Promise.all(
+    Object.entries(TABLES).map(async ([name, cfg]) => {
+      let q = db.from(name).select(cfg.columns.join(',')).order(cfg.order, { ascending: cfg.asc ?? false });
+      if (name === 'notes' && s.role !== 'creator') {
+        q = q.or(`is_private.eq.false,author_id.eq.${s.sub}`);
+      }
+      if (cfg.limit) q = q.limit(cfg.limit);
+      const { data, error } = await q;
+      if (error) throw error;
+      return [name, data ?? []] as const;
+    }),
+  );
+  res.json(Object.fromEntries(entries));
+}));
+
+app.post('/api/db/notifications/clear', requireAuth, asyncRoute(async (_req, res) => {
+  const { error } = await db.from('notifications').delete().neq('id', '');
+  if (error) throw error;
+  res.json({ success: true });
+}));
+
+app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
+  const table = String(req.params.table);
+  const cfg = TABLES[table];
+  if (!cfg) { errorBody(res, 404, 'Jadval topilmadi'); return; }
+
+  const input = req.body?.row;
+  if (!input || typeof input !== 'object' || typeof input.id !== 'string' || !input.id || input.id.length > 100) {
+    errorBody(res, 400, "Noto'g'ri ma'lumot");
+    return;
+  }
+
+  const s = sessionOf(req);
+  const row: Record<string, unknown> = {};
+  for (const col of cfg.columns) if (col in input) row[col] = input[col];
+  row.id = input.id;
+
+  if (table === 'users' && s.role !== 'creator') {
+    if (input.id !== s.sub) { errorBody(res, 403, "Ruxsat yo'q"); return; }
+    delete row.role;
+  }
+
+  if (cfg.strict && cfg.owner && s.role !== 'creator') {
+    const { data: existing } = await db.from(table).select(cfg.owner).eq('id', input.id).maybeSingle();
+    if (existing && (existing as Record<string, unknown>)[cfg.owner] !== s.sub) {
+      errorBody(res, 403, "Ruxsat yo'q");
+      return;
+    }
+    row[cfg.owner] = s.sub;
+  }
+
+  const { error } = await db.from(table).upsert(row);
+  if (error) throw error;
+  res.json({ success: true });
+}));
+
+app.delete('/api/db/:table/:id', requireAuth, asyncRoute(async (req, res) => {
+  const table = String(req.params.table);
+  const id = String(req.params.id);
+  const cfg = TABLES[table];
+  if (!cfg) { errorBody(res, 404, 'Jadval topilmadi'); return; }
+
+  const s = sessionOf(req);
+  if (cfg.creatorOnlyDelete && s.role !== 'creator') { errorBody(res, 403, "Ruxsat yo'q"); return; }
+
+  if (cfg.strict && cfg.owner && s.role !== 'creator') {
+    const { data: existing } = await db.from(table).select(cfg.owner).eq('id', id).maybeSingle();
+    if (existing && (existing as Record<string, unknown>)[cfg.owner] !== s.sub) {
+      errorBody(res, 403, "Ruxsat yo'q");
+      return;
+    }
+  }
+
+  const { error } = await db.from(table).delete().eq('id', id);
+  if (error) throw error;
+  res.json({ success: true });
+}));
+
+app.get('/api/config', (_req, res) => {
+  res.json({ siteName: 'VisionCore Group' });
+});
 
 // ---------- Multi-engine search ----------
 type Engine = 'tavily' | 'serpapi' | 'gemini' | 'exa' | 'firecrawl';
@@ -570,10 +771,16 @@ app.post('/api/ai-search', requireAuth, searchLimiter, asyncRoute(async (req, re
   res.json(await runSearch(query, engine));
 }));
 
-// ---------- Server bootstrap ----------
-async function startServer() {
-  await initDb();
+// ---------- Ishga tushirish ----------
+const errorHandler = (err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 500 ? err.status : 500;
+  if (status === 500) console.error('[server]', err);
+  res.status(status).json({
+    error: status === 500 ? 'Ichki server xatoligi' : err.expose ? err.message : "So'rov noto'g'ri",
+  });
+};
 
+async function startServer() {
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'Topilmadi' });
   });
@@ -589,20 +796,13 @@ async function startServer() {
     });
   }
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 500 ? err.status : 500;
-    if (status === 500) console.error('[server]', err);
-    res.status(status).json({ error: status === 500 ? 'Ichki server xatoligi' : (err.expose ? err.message : "So'rov noto'g'ri") });
-  });
+  app.use(errorHandler);
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[VisionCore Group] http://0.0.0.0:${PORT}`);
   });
 
-  const shutdown = () => server.close(async () => {
-    await dbPool?.end();
-    process.exit(0);
-  });
+  const shutdown = () => server.close(() => process.exit(0));
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 }
