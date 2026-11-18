@@ -18,7 +18,9 @@ const MEMBER_ID_RE = /^vcg[-_]\d{8}$/;
 const ROLES = ['engineer', 'researcher', 'designer', 'analyst', 'user'];
 const OWNER_ID = 'vcg-90000001';
 
-if (SESSION_SECRET.length < 32) throw new Error("SESSION_SECRET kamida 32 belgidan iborat bo'lishi kerak");
+if (SESSION_SECRET.length < 32) {
+  throw new Error("SESSION_SECRET kamida 32 belgidan iborat bo'lishi kerak");
+}
 
 const env = (name: string) => process.env[name]?.trim() || undefined;
 const normalizeUsername = (v: unknown) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
@@ -63,11 +65,18 @@ const DUMMY_HASH = hashPassword('timing-equalizer');
 
 // ---------- Owner (faqat env orqali) ----------
 const OWNER_USERNAME = normalizeUsername(env('OWNER_USERNAME') ?? '');
-const OWNER_PASSWORD_HASH = env('OWNER_PASSWORD') ? hashPassword(env('OWNER_PASSWORD')!) : null;
+const OWNER_PASSWORD = env('OWNER_PASSWORD') ?? '';
+const OWNER_PASSWORD_HASH = OWNER_PASSWORD ? hashPassword(OWNER_PASSWORD) : null;
 const OWNER_ENABLED = Boolean(OWNER_USERNAME && OWNER_PASSWORD_HASH);
 
 // ---------- Token (HMAC-SHA256) ----------
-interface Session { sub: string; username: string; role: string; exp: number; }
+interface Session {
+  sub: string;
+  username: string;
+  role: string;
+  exp: number;
+}
+
 type AuthedRequest = Request & { session: Session };
 
 function signToken(payload: Session): string {
@@ -139,7 +148,7 @@ const checkUsernameLimiter = rateLimit(60 * 1000, 30);
 const searchLimiter = rateLimit(60 * 1000, 20);
 
 const asyncRoute =
-  (fn: (req: Request, res: Response) => Promise<void>) =>
+  (fn: (req: Request, res: Response) => Promise<unknown>) =>
   (req: Request, res: Response, next: NextFunction) => {
     fn(req, res).catch(next);
   };
@@ -173,12 +182,15 @@ const toPublicUser = (row: UserRow) => ({
   registeredAt: row.created_at ?? null,
 });
 
-const issueToken = (user: ReturnType<typeof toPublicUser>) =>
+type PublicUser = ReturnType<typeof toPublicUser>;
+
+const issueToken = (user: PublicUser) =>
   signToken({ sub: user.id, username: user.username, role: user.role, exp: Date.now() + SESSION_TTL_MS });
 
 async function ensureOwnerRow(): Promise<UserRow> {
   const { data } = await db.from('users').select('*').eq('id', OWNER_ID).maybeSingle();
   if (data) return data as UserRow;
+
   const { data: created, error } = await db
     .from('users')
     .insert({
@@ -199,7 +211,7 @@ async function ensureOwnerRow(): Promise<UserRow> {
   return created as UserRow;
 }
 
-// ---------- Jadval siyosati (frontend ma'lumotlari uchun) ----------
+// ---------- Jadval siyosati ----------
 interface TableCfg {
   columns: string[];
   order: string;
@@ -267,23 +279,22 @@ const TABLES: Record<string, TableCfg> = {
   },
 };
 
-const errorBody = (res: Response, status: number, error: string) => {
-  res.status(status).json({ error });
-};
-
 // ---------- Auth ----------
 app.post('/api/auth/login', loginLimiter, asyncRoute(async (req, res) => {
   const username = normalizeUsername(req.body?.username);
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  const fail = () => errorBody(res, 401, "Login yoki parol noto'g'ri kiritildi!");
+  const fail = () => res.status(401).json({ authenticated: false, error: "Login yoki parol noto'g'ri kiritildi!" });
 
   if (!USERNAME_RE.test(username) || !password || password.length > 200) {
-    errorBody(res, 400, "Login va parolni to'g'ri kiriting!");
+    res.status(400).json({ error: "Login va parolni to'g'ri kiriting!" });
     return;
   }
 
   if (OWNER_ENABLED && username === OWNER_USERNAME) {
-    if (!verifyPassword(password, OWNER_PASSWORD_HASH!)) { fail(); return; }
+    if (!verifyPassword(password, OWNER_PASSWORD_HASH!)) {
+      fail();
+      return;
+    }
     const user = toPublicUser(await ensureOwnerRow());
     res.json({ authenticated: true, token: issueToken(user), user });
     return;
@@ -306,7 +317,10 @@ app.post('/api/auth/login', loginLimiter, asyncRoute(async (req, res) => {
       await db.from('users').update({ password_hash: hashPassword(password), password: null }).eq('id', row.id);
     }
   }
-  if (!valid) { fail(); return; }
+  if (!valid) {
+    fail();
+    return;
+  }
 
   const user = toPublicUser(row);
   res.json({ authenticated: true, token: issueToken(user), user });
@@ -320,17 +334,17 @@ app.post('/api/auth/register', registerLimiter, asyncRoute(async (req, res) => {
   const firstName = str(req.body?.firstName, 100);
 
   if (!firstName || !USERNAME_RE.test(username) || password.length < 6 || password.length > 200) {
-    errorBody(res, 400, 'Ism, username (3–32 belgi) va parol (6+ belgi) kiritilishi shart');
+    res.status(400).json({ error: 'Ism, username (3–32 belgi) va parol (6+ belgi) kiritilishi shart' });
     return;
   }
   if (OWNER_ENABLED && username === OWNER_USERNAME) {
-    errorBody(res, 409, 'Ushbu foydalanuvchi nomi mavjud!');
+    res.status(409).json({ error: 'Ushbu foydalanuvchi nomi mavjud!' });
     return;
   }
 
   const { data: taken } = await db.from('users').select('id').ilike('username', ilikeEscape(username)).maybeSingle();
   if (taken) {
-    errorBody(res, 409, 'Ushbu foydalanuvchi nomi mavjud!');
+    res.status(409).json({ error: 'Ushbu foydalanuvchi nomi mavjud!' });
     return;
   }
 
@@ -359,7 +373,7 @@ app.post('/api/auth/register', registerLimiter, asyncRoute(async (req, res) => {
 
   if (error) {
     if ((error as { code?: string }).code === '23505') {
-      errorBody(res, 409, 'Ushbu ID yoki username band');
+      res.status(409).json({ error: 'Ushbu ID yoki username band' });
       return;
     }
     throw error;
@@ -376,7 +390,10 @@ app.post('/api/auth/register', registerLimiter, asyncRoute(async (req, res) => {
 app.post('/api/auth/check-username', checkUsernameLimiter, asyncRoute(async (req, res) => {
   const username = normalizeUsername(req.body?.username);
   if (!USERNAME_RE.test(username)) {
-    errorBody(res, 400, "Foydalanuvchi nomi 3–32 ta harf, raqam yoki _ . - belgilaridan iborat bo'lishi kerak");
+    res.status(400).json({
+      available: false,
+      error: "Foydalanuvchi nomi 3–32 ta harf, raqam yoki _ . - belgilaridan iborat bo'lishi kerak",
+    });
     return;
   }
   const ownerTaken = OWNER_ENABLED && username === OWNER_USERNAME;
@@ -389,12 +406,16 @@ app.post('/api/auth/check-username', checkUsernameLimiter, asyncRoute(async (req
 }));
 
 // ---------- Ma'lumotlar ----------
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
 app.get('/api/db/health', asyncRoute(async (_req, res) => {
   const start = Date.now();
   const { error } = await db.from('site_settings').select('id').limit(1);
   if (error) {
     console.error('[db/health]', error);
-    errorBody(res, 503, "Supabase bilan bog'lanishda xatolik");
+    res.status(503).json({ connected: false, error: "Supabase bilan bog'lanishda xatolik" });
     return;
   }
   res.json({
@@ -409,7 +430,7 @@ app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
   const s = sessionOf(req);
   const entries = await Promise.all(
     Object.entries(TABLES).map(async ([name, cfg]) => {
-      let q = db.from(name).select(cfg.columns.join(',')).order(cfg.order, { ascending: cfg.asc ?? false });
+      let q: any = db.from(name).select(cfg.columns.join(',')).order(cfg.order, { ascending: cfg.asc ?? false });
       if (name === 'notes' && s.role !== 'creator') {
         q = q.or(`is_private.eq.false,author_id.eq.${s.sub}`);
       }
@@ -431,28 +452,38 @@ app.post('/api/db/notifications/clear', requireAuth, asyncRoute(async (_req, res
 app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
   const table = String(req.params.table);
   const cfg = TABLES[table];
-  if (!cfg) { errorBody(res, 404, 'Jadval topilmadi'); return; }
+  if (!cfg) {
+    res.status(404).json({ error: 'Jadval topilmadi' });
+    return;
+  }
 
-  const input = req.body?.row;
-  if (!input || typeof input !== 'object' || typeof input.id !== 'string' || !input.id || input.id.length > 100) {
-    errorBody(res, 400, "Noto'g'ri ma'lumot");
+  const input = req.body?.row as Record<string, unknown> | undefined;
+  if (!input || typeof input.id !== 'string' || !input.id || input.id.length > 100) {
+    res.status(400).json({ error: "Noto'g'ri ma'lumot" });
     return;
   }
 
   const s = sessionOf(req);
   const row: Record<string, unknown> = {};
-  for (const col of cfg.columns) if (col in input) row[col] = input[col];
+  for (const col of cfg.columns) {
+    if (col in input) row[col] = input[col];
+  }
   row.id = input.id;
 
   if (table === 'users' && s.role !== 'creator') {
-    if (input.id !== s.sub) { errorBody(res, 403, "Ruxsat yo'q"); return; }
+    if (input.id !== s.sub) {
+      res.status(403).json({ error: "Ruxsat yo'q" });
+      return;
+    }
     delete row.role;
   }
 
   if (cfg.strict && cfg.owner && s.role !== 'creator') {
-    const { data: existing } = await db.from(table).select(cfg.owner).eq('id', input.id).maybeSingle();
-    if (existing && (existing as Record<string, unknown>)[cfg.owner] !== s.sub) {
-      errorBody(res, 403, "Ruxsat yo'q");
+    const { data } = (await db.from(table).select('*').eq('id', input.id).maybeSingle()) as {
+      data: Record<string, unknown> | null;
+    };
+    if (data && data[cfg.owner] !== s.sub) {
+      res.status(403).json({ error: "Ruxsat yo'q" });
       return;
     }
     row[cfg.owner] = s.sub;
@@ -467,15 +498,23 @@ app.delete('/api/db/:table/:id', requireAuth, asyncRoute(async (req, res) => {
   const table = String(req.params.table);
   const id = String(req.params.id);
   const cfg = TABLES[table];
-  if (!cfg) { errorBody(res, 404, 'Jadval topilmadi'); return; }
+  if (!cfg) {
+    res.status(404).json({ error: 'Jadval topilmadi' });
+    return;
+  }
 
   const s = sessionOf(req);
-  if (cfg.creatorOnlyDelete && s.role !== 'creator') { errorBody(res, 403, "Ruxsat yo'q"); return; }
+  if (cfg.creatorOnlyDelete && s.role !== 'creator') {
+    res.status(403).json({ error: "Ruxsat yo'q" });
+    return;
+  }
 
   if (cfg.strict && cfg.owner && s.role !== 'creator') {
-    const { data: existing } = await db.from(table).select(cfg.owner).eq('id', id).maybeSingle();
-    if (existing && (existing as Record<string, unknown>)[cfg.owner] !== s.sub) {
-      errorBody(res, 403, "Ruxsat yo'q");
+    const { data } = (await db.from(table).select('*').eq('id', id).maybeSingle()) as {
+      data: Record<string, unknown> | null;
+    };
+    if (data && data[cfg.owner] !== s.sub) {
+      res.status(403).json({ error: "Ruxsat yo'q" });
       return;
     }
   }
@@ -504,8 +543,14 @@ const withTimeout = <T>(p: Promise<T>, ms: number) =>
   new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('timeout')), ms);
     p.then(
-      (v) => { clearTimeout(t); resolve(v); },
-      (e) => { clearTimeout(t); reject(e); },
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
     );
   });
 
@@ -519,7 +564,10 @@ interface Provider {
 
 const providers: Record<Engine, Provider> = {
   tavily: {
-    label: 'Tavily (tavily.com)', icon: '🌐', envName: 'TAVILY_API_KEY', key: env('TAVILY_API_KEY'),
+    label: 'Tavily (tavily.com)',
+    icon: '🌐',
+    envName: 'TAVILY_API_KEY',
+    key: env('TAVILY_API_KEY'),
     run: async (query, key) => {
       const data = await fetchJson('https://api.tavily.com/search', {
         method: 'POST',
@@ -537,7 +585,10 @@ const providers: Record<Engine, Provider> = {
     },
   },
   serpapi: {
-    label: 'SerpAPI (serpapi.com)', icon: '🔍', envName: 'SERPAPI_API_KEY', key: env('SERPAPI_API_KEY'),
+    label: 'SerpAPI (serpapi.com)',
+    icon: '🔍',
+    envName: 'SERPAPI_API_KEY',
+    key: env('SERPAPI_API_KEY'),
     run: async (query, key) => {
       const data = await fetchJson(
         `https://serpapi.com/search.json?${new URLSearchParams({ q: query, api_key: key })}`,
@@ -550,7 +601,10 @@ const providers: Record<Engine, Provider> = {
     },
   },
   gemini: {
-    label: 'Google Gemini (ai.google.dev)', icon: '✨', envName: 'GEMINI_API_KEY', key: env('GEMINI_API_KEY'),
+    label: 'Google Gemini (ai.google.dev)',
+    icon: '✨',
+    envName: 'GEMINI_API_KEY',
+    key: env('GEMINI_API_KEY'),
     run: async (query, key) => {
       const ai = new GoogleGenAI({ apiKey: key });
       const response = await ai.models.generateContent({
@@ -561,7 +615,10 @@ const providers: Record<Engine, Provider> = {
     },
   },
   exa: {
-    label: 'Exa AI (exa.ai)', icon: '⚡', envName: 'EXA_API_KEY', key: env('EXA_API_KEY'),
+    label: 'Exa AI (exa.ai)',
+    icon: '⚡',
+    envName: 'EXA_API_KEY',
+    key: env('EXA_API_KEY'),
     run: async (query, key) => {
       const data = await fetchJson('https://api.exa.ai/search', {
         method: 'POST',
@@ -576,7 +633,10 @@ const providers: Record<Engine, Provider> = {
     },
   },
   firecrawl: {
-    label: 'Firecrawl (firecrawl.dev)', icon: '🔥', envName: 'FIRECRAWL_API_KEY', key: env('FIRECRAWL_API_KEY'),
+    label: 'Firecrawl (firecrawl.dev)',
+    icon: '🔥',
+    envName: 'FIRECRAWL_API_KEY',
+    key: env('FIRECRAWL_API_KEY'),
     run: async (query, key) => {
       const data = await fetchJson('https://api.firecrawl.dev/v1/search', {
         method: 'POST',
@@ -600,7 +660,7 @@ const providers: Record<Engine, Provider> = {
 async function runProvider(engine: Engine, query: string): Promise<string> {
   const p = providers[engine];
   if (!p.key) {
-    return `⚠️ **${p.label} API kaliti topilmadi.** \`.env\` fayliga \`${p.envName}\` qiymatini kiriting.`;
+    return `⚠️ **${p.label} API kaliti topilmadi.** \`${p.envName}\` ni sozlang.`;
   }
   try {
     return await withTimeout(p.run(query, p.key), PROVIDER_TIMEOUT_MS);
@@ -620,7 +680,7 @@ async function runSearch(query: string, engine: string): Promise<{ text: string;
       engine,
       text:
         `### 🌐 VisionCore Group Qidiruv Tizimi\n\nSo'rov: **"${query}"**\n\n` +
-        `API kalitlarni \`.env\` ga kiriting: ${ENGINES.map((e) => `\`${providers[e].envName}\``).join(', ')}`,
+        `API kalitlarni sozlang: ${ENGINES.map((e) => `\`${providers[e].envName}\``).join(', ')}`,
     };
   }
   const sections = await Promise.all(
@@ -628,133 +688,6 @@ async function runSearch(query: string, engine: string): Promise<{ text: string;
   );
   return { text: sections.join('\n\n---\n\n'), engine };
 }
-
-// ---------- Auth routes ----------
-app.post('/api/auth/login', loginLimiter, asyncRoute(async (req, res) => {
-  const username = normalizeUsername(req.body?.username);
-  const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  const invalid = () => res.status(401).json({ authenticated: false, error: "Login yoki parol noto'g'ri kiritildi!" });
-
-  if (!username || !password || password.length > 200 || !USERNAME_RE.test(username)) {
-    res.status(400).json({ authenticated: false, error: 'Login va parolni to\'g\'ri kiriting!' });
-    return;
-  }
-
-  if (OWNER_ENABLED && username === OWNER_USERNAME) {
-    if (!verifyPassword(password, OWNER_PASSWORD_HASH!)) return invalid();
-    const user = await loadOwnerProfile();
-    res.json({ authenticated: true, token: issueToken(user), user });
-    return;
-  }
-
-  if (!supabase) {
-    verifyPassword(password, DUMMY_HASH);
-    return invalid();
-  }
-
-  const { data } = await supabase.from('users').select('*').ilike('username', username).maybeSingle();
-  const row = data as UserRow | null;
-  if (!row) {
-    verifyPassword(password, DUMMY_HASH);
-    return invalid();
-  }
-
-  let valid = false;
-  if (row.password_hash) {
-    valid = verifyPassword(password, row.password_hash);
-  } else if (row.password) {
-    // Legacy plaintext account: verify once, then migrate to a hash.
-    valid = safeEqual(password, row.password);
-    if (valid) {
-      await supabase
-        .from('users')
-        .update({ password_hash: hashPassword(password), password: null })
-        .eq('id', row.id);
-    }
-  }
-  if (!valid) return invalid();
-
-  const user = toPublicUser(row);
-  res.json({ authenticated: true, token: issueToken(user), user });
-}));
-
-app.post('/api/auth/check-username', checkUsernameLimiter, asyncRoute(async (req, res) => {
-  const username = normalizeUsername(req.body?.username);
-  if (!USERNAME_RE.test(username)) {
-    res.status(400).json({
-      available: false,
-      error: "Foydalanuvchi nomi 3–32 ta harf, raqam yoki _ . - belgilaridan iborat bo'lishi kerak",
-    });
-    return;
-  }
-  if (OWNER_ENABLED && username === OWNER_USERNAME) {
-    res.json({ available: false, error: 'Ushbu foydalanuvchi nomi band!' });
-    return;
-  }
-  if (supabase) {
-    const { data } = await supabase.from('users').select('id').ilike('username', username).maybeSingle();
-    if (data) {
-      res.json({ available: false, error: 'Ushbu foydalanuvchi nomi band!' });
-      return;
-    }
-  }
-  res.json({ available: true });
-}));
-
-// ---------- Public config ----------
-app.get('/api/supabase/env', (_req, res) => {
-  res.json({
-    configured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY),
-    url: SUPABASE_URL,
-    anonKey: SUPABASE_ANON_KEY,
-  });
-});
-
-app.get('/api/config', (_req, res) => {
-  res.json({ siteName: 'VisionCore Group', authMode: 'backend' });
-});
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString(), uptime: process.uptime() });
-});
-
-app.get('/api/db/health', asyncRoute(async (_req, res) => {
-  if (!dbPool) {
-    res.json({ connected: false, message: 'DATABASE_URL sozlanmagan' });
-    return;
-  }
-  try {
-    const { rows } = await dbPool.query<{ now: string }>('SELECT NOW() AS now');
-    res.json({ connected: true, serverTime: rows[0].now });
-  } catch (err) {
-    console.error('[db/health]', err);
-    res.status(503).json({ connected: false, error: 'PostgreSQL bilan bog\'lanishda xatolik' });
-  }
-}));
-
-// ---------- Protected routes ----------
-app.get('/api/chats', requireAuth, asyncRoute(async (_req, res) => {
-  res.json(await listChats());
-}));
-
-app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
-  const msg = req.body;
-  if (!msg || typeof msg !== 'object' || typeof msg.id !== 'string' || !msg.id || msg.id.length > 100) {
-    res.status(400).json({ error: 'Xabar formati noto\'g\'ri' });
-    return;
-  }
-  await saveChat(msg as ChatMessage);
-  res.json({ success: true, message: msg });
-}));
-
-app.delete('/api/chats/:id', requireAuth, asyncRoute(async (req, res) => {
-  if (sessionOf(req).role !== 'creator') {
-    res.status(403).json({ error: 'Ruxsat yo\'q' });
-    return;
-  }
-  await deleteChat(String(req.params.id));
-  res.json({ success: true });
-}));
 
 app.post('/api/ai-search', requireAuth, searchLimiter, asyncRoute(async (req, res) => {
   const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
@@ -770,7 +703,7 @@ app.post('/api/ai-search', requireAuth, searchLimiter, asyncRoute(async (req, re
   res.json(await runSearch(query, engine));
 }));
 
-// ---------- 404 va xatolik ----------
+// ---------- Xatolik va 404 ----------
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Topilmadi' });
 });
@@ -788,11 +721,13 @@ export default app;
 
 // ---------- Lokal ishga tushirish (Vercel'da ishlamaydi) ----------
 if (!process.env.VERCEL) {
-  const start = async () => {
+  (async () => {
     if (IS_PROD) {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
-      app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
     } else {
       const { createServer } = await import('vite');
       const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
@@ -806,9 +741,7 @@ if (!process.env.VERCEL) {
     const shutdown = () => server.close(() => process.exit(0));
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
-  };
-
-  start().catch((err) => {
+  })().catch((err) => {
     console.error('[startup]', err);
     process.exit(1);
   });
