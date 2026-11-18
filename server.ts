@@ -2,7 +2,6 @@ import crypto from 'crypto';
 import path from 'path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import dotenv from 'dotenv';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 
@@ -771,7 +770,11 @@ app.post('/api/ai-search', requireAuth, searchLimiter, asyncRoute(async (req, re
   res.json(await runSearch(query, engine));
 }));
 
-// ---------- Ishga tushirish ----------
+// ---------- 404 va xatolik ----------
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Topilmadi' });
+});
+
 const errorHandler = (err: any, _req: Request, res: Response, _next: NextFunction) => {
   const status = typeof err?.status === 'number' && err.status >= 400 && err.status < 500 ? err.status : 500;
   if (status === 500) console.error('[server]', err);
@@ -779,35 +782,34 @@ const errorHandler = (err: any, _req: Request, res: Response, _next: NextFunctio
     error: status === 500 ? 'Ichki server xatoligi' : err.expose ? err.message : "So'rov noto'g'ri",
   });
 };
+app.use(errorHandler);
 
-async function startServer() {
-  app.use('/api', (_req, res) => {
-    res.status(404).json({ error: 'Topilmadi' });
-  });
+export default app;
 
-  if (!IS_PROD) {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+// ---------- Lokal ishga tushirish (Vercel'da ishlamaydi) ----------
+if (!process.env.VERCEL) {
+  const start = async () => {
+    if (IS_PROD) {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+    } else {
+      const { createServer } = await import('vite');
+      const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
+      app.use(vite.middlewares);
+    }
+
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[VisionCore Group] http://localhost:${PORT}`);
     });
-  }
 
-  app.use(errorHandler);
+    const shutdown = () => server.close(() => process.exit(0));
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+  };
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[VisionCore Group] http://0.0.0.0:${PORT}`);
+  start().catch((err) => {
+    console.error('[startup]', err);
+    process.exit(1);
   });
-
-  const shutdown = () => server.close(() => process.exit(0));
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
 }
-
-startServer().catch((err) => {
-  console.error('[startup]', err);
-  process.exit(1);
-});
