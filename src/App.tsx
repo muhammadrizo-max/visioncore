@@ -242,14 +242,6 @@ export default function App() {
     });
   };
 
-  const handleClearNotifications = () => {
-    setNotifications([]);
-    const client = getSupabaseClient();
-    if (client) {
-      void client.from('notifications').delete().neq('id', '');
-    }
-  };
-
   // Auth Handlers
   const handleLoginSuccess = (user: User) => {
     const isNewRegistration = !users.some(u => u.id === user.id);
