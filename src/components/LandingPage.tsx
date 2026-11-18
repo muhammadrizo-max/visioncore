@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { User, SiteSettings } from '../types';
 import { generateVcgUserId } from '../lib/idGenerator';
-import { getSupabaseClient } from '../lib/supabase';
+import { apiPost, saveToken } from '../lib/api';
 import { PortfolioShowcase } from './PortfolioShowcase';
 import { INITIAL_SITE_SETTINGS } from '../mockData';
 
@@ -178,7 +178,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }, 3000);
   };
 
-  // Handle Registration (Coin Front)
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
@@ -191,74 +190,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     const cleanUsername = (regUsername || generateUsernameFromName(cleanName)).trim().toLowerCase();
     if (cleanUsername.length < 6) {
-      setRegError('Username kamida 6 ta belgi bo\'lsin!');
+      setRegError("Username kamida 6 ta belgi bo'lsin!");
       return;
     }
     if (regPassword.length < 6) {
-      setRegError('Parol kamida 6 ta belgi bo\'lsin!');
+      setRegError("Parol kamida 6 ta belgi bo'lsin!");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const checkRes = await fetch('/api/auth/check-username', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanUsername })
-      }).catch(() => null);
-
-      if (checkRes && checkRes.ok) {
-        const checkData = await checkRes.json();
-        if (!checkData.available) {
-          setRegError(checkData.error || 'Ushbu username band!');
-          setIsSubmitting(false);
-          return;
-        }
-      }
-
-      const existsLocally = allUsers.some((u) => u.username.toLowerCase() === cleanUsername);
-      if (existsLocally) {
-        setRegError('Ushbu foydalanuvchi nomi mavjud!');
-        setIsSubmitting(false);
-        return;
-      }
-
-      const sb = getSupabaseClient();
-      if (sb) {
-        const { data: sbExisting } = await sb
-          .from('users')
-          .select('id')
-          .ilike('username', cleanUsername)
-          .maybeSingle();
-        if (sbExisting) {
-          setRegError('Ushbu foydalanuvchi nomi mavjud!');
-          setIsSubmitting(false);
-          return;
-        }
-      }
-
-      const newUser: User = {
+      const data = await apiPost<{ token: string; user: User }>('/api/auth/register', {
         id: generateVcgUserId(),
+        firstName: cleanName,
         username: cleanUsername,
         password: regPassword,
-        firstName: cleanName,
-        lastName: '',
-        phone: '',
-        email: `${cleanUsername}@visioncore.group`,
-        role: 'user',
-        avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${cleanUsername}`,
-        registeredAt: new Date().toISOString()
-      };
-
-      triggerCoinSuccess(newUser, 'register');
-    } catch {
-      setRegError('Ro\'yxatdan o\'tishda xatolik yuz berdi!');
+      });
+      saveToken(data.token);
+      triggerCoinSuccess(data.user, 'register');
+    } catch (err) {
+      setRegError(err instanceof Error ? err.message : "Ro'yxatdan o'tishda xatolik yuz berdi!");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Handle Login (Coin Back) — Checks Backend Auth AND Supabase users table
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -271,65 +227,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
     setIsSubmitting(true);
     try {
-      // 1. Check backend /api/auth/login when Express server is active
-      const resp = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: cleanUsername, password: loginPassword })
-      }).catch(() => null);
-
-      if (resp && resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        if (data.authenticated && data.user) {
-          triggerCoinSuccess(data.user as User, 'login');
-          return;
-        }
-      } else if (resp && resp.status === 401) {
-        const data = await resp.json().catch(() => ({}));
-        setLoginError(data.error || 'Login yoki parol noto\'g\'ri!');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 2. Check synced users list or Supabase users table directly (handles Vercel/static & team users)
-      let matchedUser = allUsers.find(
-        (u) => u.username.toLowerCase() === cleanUsername && u.password === loginPassword
-      );
-
-      if (!matchedUser) {
-        const sb = getSupabaseClient();
-        if (sb) {
-          const { data: sbRow } = await sb
-            .from('users')
-            .select('*')
-            .ilike('username', cleanUsername)
-            .maybeSingle();
-
-          if (sbRow && sbRow.password && sbRow.password === loginPassword) {
-            matchedUser = {
-              id: sbRow.id,
-              username: sbRow.username,
-              password: sbRow.password,
-              firstName: sbRow.first_name || '',
-              lastName: sbRow.last_name || '',
-              phone: sbRow.phone || '',
-              email: sbRow.email || '',
-              telegramUsername: sbRow.telegram_username || '',
-              role: sbRow.role,
-              avatar: sbRow.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${sbRow.username}`,
-              registeredAt: sbRow.registered_at
-            };
-          }
-        }
-      }
-
-      if (matchedUser) {
-        triggerCoinSuccess(matchedUser, 'login');
-      } else {
-        setLoginError('Login yoki parol noto\'g\'ri kiritildi!');
-      }
-    } catch {
-      setLoginError('Server bilan bog\'lanishda xatolik!');
+      const data = await apiPost<{ token: string; user: User }>('/api/auth/login', {
+        username: cleanUsername,
+        password: loginPassword,
+      });
+      saveToken(data.token);
+      triggerCoinSuccess(data.user, 'login');
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Server bilan bog'lanishda xatolik!");
     } finally {
       setIsSubmitting(false);
     }
