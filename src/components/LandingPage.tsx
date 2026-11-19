@@ -1,3 +1,4 @@
+import { ForgotPassword } from './ForgotPassword';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Rocket,
@@ -506,6 +507,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       >
                         Kirish
                       </button>
+                      <ForgotPassword />
                     </p>
                   </div>
                 ) : (
