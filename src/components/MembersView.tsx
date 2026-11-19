@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import { PasswordAdminPanel } from './PasswordAdminPanel';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Users, UserPlus, Activity, TrendingUp, Clock, Shield, Search } from 'lucide-react';
 import { User, MemberActivity, Task, Order } from '../types';
 
@@ -247,6 +248,7 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
       {activeTab === 'manage' && (
         <div className="space-y-6">
+          <PasswordAdminPanel onStatus={setStatusMsg} />
           {/* ID orqali qo'shish */}
           <div className="p-6 rounded-3xl liquid-glass space-y-4">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
