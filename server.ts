@@ -703,6 +703,82 @@ app.post('/api/ai-search', requireAuth, searchLimiter, asyncRoute(async (req, re
   res.json(await runSearch(query, engine));
 }));
 
+// ---------- Parolni unutish ----------
+app.post('/api/auth/forgot-password', registerLimiter, asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body?.username);
+  const note = str(req.body?.note, 300);
+  if (!USERNAME_RE.test(username)) {
+    res.status(400).json({ error: "Username 3–32 belgidan iborat bo'lishi kerak" });
+    return;
+  }
+  const { data: user } = await db
+    .from('users')
+    .select('id, username')
+    .ilike('username', ilikeEscape(username))
+    .neq('role', 'creator')
+    .maybeSingle();
+  if (user) {
+    await db.from('password_requests').insert({
+      user_id: user.id,
+      username: user.username,
+      note,
+      status: 'open',
+    });
+  }
+  // Foydalanuvchi mavjudligini oshkor qilmaslik uchun javob har doim bir xil
+  res.json({ message: "So'rovingiz adminga yuborildi. Admin siz bilan Telegram yoki telefon orqali bog'lanadi." });
+}));
+
+app.get('/api/admin/password-requests', requireCreator, asyncRoute(async (_req, res) => {
+  const { data, error } = await db
+    .from('password_requests')
+    .select('*')
+    .eq('status', 'open')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  res.json(data ?? []);
+}));
+
+app.post('/api/admin/password-requests/:id/resolve', requireCreator, asyncRoute(async (req, res) => {
+  const requestId = String(req.params.id);
+  const { data: reqRow, error: readErr } = await db
+    .from('password_requests')
+    .select('*')
+    .eq('id', requestId)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!reqRow) {
+    res.status(404).json({ error: "So'rov topilmadi" });
+    return;
+  }
+
+  const password = `vcg_${crypto.randomBytes(6).toString('base64url')}`;
+  const { data: updated, error } = await db
+    .from('users')
+    .update({
+      password_hash: hashPassword(password),
+      password: null,
+      password_enc: encryptSecret(password),
+    })
+    .eq('id', reqRow.user_id)
+    .neq('role', 'creator')
+    .select('id')
+    .maybeSingle();
+  if (error) throw error;
+  if (!updated) {
+    res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+    return;
+  }
+
+  await db
+    .from('password_requests')
+    .update({ status: 'done', resolved_at: new Date().toISOString() })
+    .eq('id', requestId);
+
+  res.json({ password, username: reqRow.username });
+}));
+
 // ---------- Xatolik va 404 ----------
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'Topilmadi' });
