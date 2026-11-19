@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Send, 
-  Paperclip, 
-  Mic, 
-  Square, 
-  Play, 
-  Pause, 
-  Users, 
-  Lock, 
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  Send,
+  Paperclip,
+  Mic,
+  Square,
+  Play,
+  Pause,
+  Users,
+  Lock,
   Image as ImageIcon,
   Search,
   MessageCircle,
-  X
+  X,
+  ChevronLeft,
 } from 'lucide-react';
 import { User, ChatMessage } from '../types';
 import { api, apiPost, getToken } from '../lib/api';
@@ -26,26 +27,71 @@ interface ChatViewProps {
   darkMode: boolean;
 }
 
+interface TypingUser {
+  userId: string;
+  userName: string;
+  status: 'typing' | 'recording';
+}
+
+function getCanonicalDmChatId(idA: string, idB: string): string {
+  return `direct::${[idA, idB].sort().join('::')}`;
+}
+
+function extractDmParticipants(chatId: string): [string, string] | null {
+  if (!chatId) return null;
+  if (chatId.startsWith('direct::')) {
+    const parts = chatId.slice(8).split('::').filter(Boolean);
+    if (parts.length === 2) return [parts[0], parts[1]];
+  }
+  if (chatId.startsWith('direct_')) {
+    const body = chatId.slice(7);
+    // Match both vcg-12345678 and vcg_12345678 without breaking on underscores inside IDs
+    const matches = body.match(/vcg[-_]\d+/gi);
+    if (matches && matches.length === 2) {
+      return [matches[0], matches[1]];
+    }
+    const rawParts = body.split('_').filter(Boolean);
+    if (rawParts.length === 2) {
+      return [rawParts[0], rawParts[1]];
+    }
+  }
+  return null;
+}
+
+function getMessageOrderTs(msg: ChatMessage): number {
+  if (msg.createdAt) {
+    const parsed = Date.parse(msg.createdAt);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  const match = msg.id.match(/(\d{13})/);
+  if (match) return Number(match[1]);
+  return 0;
+}
+
 export const ChatView: React.FC<ChatViewProps> = ({
   currentUser,
   allUsers,
   chats,
   onSendMessage,
-  darkMode
 }) => {
   const [selectedChatId, setSelectedChatId] = useState<string>('general');
+  const [mobileView, setMobileView] = useState<'chat' | 'list'>('chat');
+  const [openedDmIds, setOpenedDmIds] = useState<string[]>([]);
   const [inputText, setInputText] = useState<string>('');
   const [attachmentUrl, setAttachmentUrl] = useState<string>('');
-  
+
   // Voice recording state
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
 
+  // Live typing / recording presence from other users
+  const [activeTypers, setActiveTypers] = useState<TypingUser[]>([]);
+
   // Search User modal state
   const [showSearchModal, setShowSearchModal] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<any>(null);
@@ -53,16 +99,72 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Cross-tab real-time sync with BroadcastChannel
+  const chatsRef = useRef<ChatMessage[]>(chats);
+  chatsRef.current = chats;
+  const onSendMessageRef = useRef(onSendMessage);
+  onSendMessageRef.current = onSendMessage;
+  const selectedChatIdRef = useRef(selectedChatId);
+  selectedChatIdRef.current = selectedChatId;
+
+  const typingIdleTimerRef = useRef<any>(null);
+  const lastTypingPingRef = useRef<number>(0);
+
+  const currentChatKey =
+    selectedChatId === 'general'
+      ? 'general'
+      : getCanonicalDmChatId(currentUser.id, selectedChatId);
+
+  const currentUserDisplayName =
+    `${currentUser.firstName || currentUser.username} ${currentUser.lastName || ''}`.trim();
+
+  // Broadcast typing / recording state helper
+  const sendPresenceSignal = (status: 'typing' | 'recording' | 'idle', targetChatKey = currentChatKey) => {
+    if (getToken()) {
+      void apiPost('/api/chats/presence', {
+        chatId: targetChatKey,
+        status,
+        userName: currentUserDisplayName,
+      }).catch(() => {});
+    }
+    try {
+      const bc = new BroadcastChannel('visioncore_live_chats');
+      bc.postMessage({
+        type: 'PRESENCE',
+        chatKey: targetChatKey,
+        userId: currentUser.id,
+        userName: currentUserDisplayName,
+        status,
+      });
+      bc.close();
+    } catch {
+      // ignore
+    }
+  };
+
+  // Cross-tab real-time sync with BroadcastChannel (no re-subscribe on every message)
   useEffect(() => {
     let bc: BroadcastChannel | null = null;
     try {
       bc = new BroadcastChannel('visioncore_live_chats');
       bc.onmessage = (event) => {
-        if (event.data && event.data.type === 'NEW_MESSAGE') {
-          const msg = event.data.message;
-          if (!chats.some(c => c.id === msg.id)) {
-            onSendMessage(msg);
+        if (!event.data) return;
+        if (event.data.type === 'NEW_MESSAGE') {
+          const msg = event.data.message as ChatMessage;
+          if (!chatsRef.current.some((c) => c.id === msg.id)) {
+            onSendMessageRef.current(msg);
+          }
+        } else if (event.data.type === 'PRESENCE') {
+          const { chatKey, userId, userName, status } = event.data;
+          const activeKey =
+            selectedChatIdRef.current === 'general'
+              ? 'general'
+              : getCanonicalDmChatId(currentUser.id, selectedChatIdRef.current);
+          if (userId !== currentUser.id && chatKey === activeKey) {
+            setActiveTypers((prev) => {
+              const filtered = prev.filter((t) => t.userId !== userId);
+              if (status === 'idle') return filtered;
+              return [...filtered, { userId, userName, status }];
+            });
           }
         }
       };
@@ -72,68 +174,153 @@ export const ChatView: React.FC<ChatViewProps> = ({
     return () => {
       bc?.close();
     };
-  }, [chats, onSendMessage]);
+  }, [currentUser.id]);
 
-  // Periodic server sync for multi-client / multi-device real-time chat
+  // Fast server polling for real-time messages & typing/recording status
   useEffect(() => {
-    const fetchServerChats = async () => {
-      if (!getToken()) return;
+    let cancelled = false;
+
+    const pollServer = async () => {
+      if (!getToken() || cancelled) return;
       try {
         const data = await api<ChatMessage[]>('/api/chats');
-        if (Array.isArray(data) && data.length > 0) {
+        if (!cancelled && Array.isArray(data)) {
+          const knownIds = new Set(chatsRef.current.map((c) => c.id));
           data.forEach((serverMsg) => {
-            if (!chats.some(c => c.id === serverMsg.id)) {
-              onSendMessage(serverMsg);
+            if (!knownIds.has(serverMsg.id)) {
+              onSendMessageRef.current(serverMsg);
             }
           });
         }
       } catch {
         // silent fallback
       }
+
+      try {
+        const activeKey =
+          selectedChatIdRef.current === 'general'
+            ? 'general'
+            : getCanonicalDmChatId(currentUser.id, selectedChatIdRef.current);
+        const res = await api<{ active: TypingUser[] }>(
+          `/api/chats/presence?chatId=${encodeURIComponent(activeKey)}`
+        );
+        if (!cancelled && res && Array.isArray(res.active)) {
+          setActiveTypers(res.active);
+        }
+      } catch {
+        // ignore
+      }
     };
 
-    void fetchServerChats();
-    const interval = setInterval(() => { void fetchServerChats(); }, 4000);
-    return () => clearInterval(interval);
-  }, [chats, onSendMessage]);
+    void pollServer();
+    const interval = setInterval(() => {
+      void pollServer();
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [currentUser.id]);
+
+  // Refresh typing presence immediately when switching active chat
+  useEffect(() => {
+    setActiveTypers([]);
+    if (!getToken()) return;
+    void api<{ active: TypingUser[] }>(
+      `/api/chats/presence?chatId=${encodeURIComponent(currentChatKey)}`
+    )
+      .then((res) => {
+        if (res && Array.isArray(res.active)) setActiveTypers(res.active);
+      })
+      .catch(() => {});
+  }, [currentChatKey]);
+
+  // Maintain recording heartbeat while mic is active
+  useEffect(() => {
+    if (!isRecording) return;
+    sendPresenceSignal('recording');
+    const beat = setInterval(() => {
+      sendPresenceSignal('recording');
+    }, 2000);
+    return () => {
+      clearInterval(beat);
+    };
+  }, [isRecording, currentChatKey]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chats, selectedChatId]);
+  }, [chats.length, selectedChatId, mobileView]);
 
-  const activeDirectUserIds = Array.from(
-    new Set(
-      chats
-        .filter(c => c.chatId && c.chatId.startsWith('direct_'))
-        .flatMap(c => {
-          const parts = c.chatId.replace('direct_', '').split('_');
-          if (parts[0] === currentUser.id) return [parts[1]];
-          if (parts[1] === currentUser.id) return [parts[0]];
-          return [];
-        })
-        .filter(id => id && id !== currentUser.id)
-    )
-  );
-
-  if (selectedChatId !== 'general' && !activeDirectUserIds.includes(selectedChatId)) {
-    activeDirectUserIds.unshift(selectedChatId);
-  }
-
-  const activeChatUsers = allUsers.filter(u => activeDirectUserIds.includes(u.id));
-
-  const filteredMessages = chats.filter((c) => {
-    if (selectedChatId === 'general') {
-      return !c.chatId || c.chatId === 'general';
+  // Build list of all DM peer IDs (from persisted chat history + explicitly opened DMs in session)
+  const dmPeerIds = useMemo(() => {
+    const ids = new Set<string>(openedDmIds);
+    chats.forEach((c) => {
+      const participants = extractDmParticipants(c.chatId || '');
+      if (!participants) return;
+      const [p1, p2] = participants;
+      if (p1 === currentUser.id && p2 !== currentUser.id) ids.add(p2);
+      else if (p2 === currentUser.id && p1 !== currentUser.id) ids.add(p1);
+    });
+    if (selectedChatId !== 'general' && selectedChatId !== currentUser.id) {
+      ids.add(selectedChatId);
     }
-    const directChatId1 = `direct_${currentUser.id}_${selectedChatId}`;
-    const directChatId2 = `direct_${selectedChatId}_${currentUser.id}`;
-    return c.chatId === directChatId1 || c.chatId === directChatId2;
-  });
+    return Array.from(ids);
+  }, [chats, openedDmIds, selectedChatId, currentUser.id]);
 
-  const selectedUser = allUsers.find(u => u.id === selectedChatId);
+  // Build peer user objects safely even if a brand-new sender hasn't finished syncing into allUsers yet
+  const activeChatUsers: User[] = useMemo(() => {
+    return dmPeerIds.map((peerId) => {
+      const existing = allUsers.find((u) => u.id === peerId);
+      if (existing) return existing;
+      const peerMsg = chats.find((m) => m.senderId === peerId);
+      return {
+        id: peerId,
+        username: peerMsg?.senderName || peerId,
+        firstName: peerMsg?.senderName || 'Foydalanuvchi',
+        lastName: '',
+        phone: '',
+        email: '',
+        role: (peerMsg?.senderRole as User['role']) || 'user',
+        avatar:
+          peerMsg?.senderAvatar ||
+          `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(peerId)}`,
+        registeredAt: new Date().toISOString(),
+      };
+    });
+  }, [dmPeerIds, allUsers, chats]);
+
+  // Filter & strictly sort messages chronologically so sent messages NEVER swap positions
+  const filteredMessages = useMemo(() => {
+    const list = chats.filter((c) => {
+      if (selectedChatId === 'general') {
+        return !c.chatId || c.chatId === 'general';
+      }
+      const participants = extractDmParticipants(c.chatId || '');
+      if (!participants) return false;
+      const [p1, p2] = participants;
+      return (
+        (p1 === currentUser.id && p2 === selectedChatId) ||
+        (p1 === selectedChatId && p2 === currentUser.id)
+      );
+    });
+
+    return [...list].sort((a, b) => {
+      const tsA = getMessageOrderTs(a);
+      const tsB = getMessageOrderTs(b);
+      if (tsA !== tsB) return tsA - tsB;
+      return a.id.localeCompare(b.id);
+    });
+  }, [chats, selectedChatId, currentUser.id]);
+
+  const selectedUser =
+    activeChatUsers.find((u) => u.id === selectedChatId) ||
+    allUsers.find((u) => u.id === selectedChatId);
 
   const broadcastMessage = (msg: ChatMessage) => {
     onSendMessage(msg);
+    sendPresenceSignal('idle', msg.chatId);
+
     if (getToken()) {
       void apiPost('/api/chats', msg).catch(() => {});
     }
@@ -142,27 +329,56 @@ export const ChatView: React.FC<ChatViewProps> = ({
       const bc = new BroadcastChannel('visioncore_live_chats');
       bc.postMessage({ type: 'NEW_MESSAGE', message: msg });
       bc.close();
-    } catch {}
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleInputChange = (val: string) => {
+    setInputText(val);
+    const now = Date.now();
+    if (val.trim()) {
+      if (now - lastTypingPingRef.current > 1800) {
+        lastTypingPingRef.current = now;
+        sendPresenceSignal('typing');
+      }
+      if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+      typingIdleTimerRef.current = setTimeout(() => {
+        sendPresenceSignal('idle');
+      }, 2600);
+    } else {
+      if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+      sendPresenceSignal('idle');
+    }
   };
 
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim() && !attachmentUrl) return;
 
-    const currentChatTarget = selectedChatId === 'general' 
-      ? 'general' 
-      : `direct_${currentUser.id}_${selectedChatId}`;
+    if (typingIdleTimerRef.current) clearTimeout(typingIdleTimerRef.current);
+
+    const nowIso = new Date().toISOString();
+    const currentChatTarget =
+      selectedChatId === 'general'
+        ? 'general'
+        : getCanonicalDmChatId(currentUser.id, selectedChatId);
+
+    if (selectedChatId !== 'general') {
+      setOpenedDmIds((prev) => (prev.includes(selectedChatId) ? prev : [selectedChatId, ...prev]));
+    }
 
     const newMsg: ChatMessage = {
       id: `MSG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       senderId: currentUser.id,
-      senderName: `${currentUser.firstName || currentUser.username} ${currentUser.lastName || ''}`.trim(),
+      senderName: currentUserDisplayName,
       senderRole: currentUser.role,
       senderAvatar: currentUser.avatar,
       text: inputText.trim(),
       timestamp: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+      createdAt: nowIso,
       chatId: currentChatTarget,
-      attachmentUrl: attachmentUrl || undefined
+      attachmentUrl: attachmentUrl || undefined,
     };
 
     broadcastMessage(newMsg);
@@ -209,26 +425,38 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const stopAndSendRecording = () => {
     if (!mediaRecorderRef.current || !isRecording) return;
 
+    const targetChatIdSnapshot = selectedChatId;
+    const durationSnapshot = recordingDuration || 1;
+
     mediaRecorderRef.current.onstop = () => {
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
       const reader = new FileReader();
       reader.onload = () => {
         const base64Audio = reader.result as string;
-        const currentChatTarget = selectedChatId === 'general' 
-          ? 'general' 
-          : `direct_${currentUser.id}_${selectedChatId}`;
+        const nowIso = new Date().toISOString();
+        const currentChatTarget =
+          targetChatIdSnapshot === 'general'
+            ? 'general'
+            : getCanonicalDmChatId(currentUser.id, targetChatIdSnapshot);
+
+        if (targetChatIdSnapshot !== 'general') {
+          setOpenedDmIds((prev) =>
+            prev.includes(targetChatIdSnapshot) ? prev : [targetChatIdSnapshot, ...prev]
+          );
+        }
 
         const newMsg: ChatMessage = {
-          id: `MSG-VOICE-${Date.now()}`,
+          id: `MSG-VOICE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           senderId: currentUser.id,
-          senderName: `${currentUser.firstName || currentUser.username} ${currentUser.lastName || ''}`.trim(),
+          senderName: currentUserDisplayName,
           senderRole: currentUser.role,
           senderAvatar: currentUser.avatar,
           text: 'Ovozli xabar',
           timestamp: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+          createdAt: nowIso,
           chatId: currentChatTarget,
           audioUrl: base64Audio,
-          audioDuration: recordingDuration || 1
+          audioDuration: durationSnapshot,
         };
 
         broadcastMessage(newMsg);
@@ -241,6 +469,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     mediaRecorderRef.current.stop();
     setIsRecording(false);
     clearInterval(timerRef.current);
+    sendPresenceSignal('idle');
   };
 
   const cancelRecording = () => {
@@ -251,6 +480,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     setIsRecording(false);
     clearInterval(timerRef.current);
     audioChunksRef.current = [];
+    sendPresenceSignal('idle');
   };
 
   const handlePlayVoice = (msgId: string, audioUrl: string) => {
@@ -277,14 +507,22 @@ export const ChatView: React.FC<ChatViewProps> = ({
     });
   };
 
-  const handleOpenDirectChatWithUser = (userId: string) => {
-    if (userId === currentUser.id) return;
-    setSelectedChatId(userId);
+  const handleSelectChat = (chatId: string) => {
+    if (chatId !== 'general' && chatId !== currentUser.id) {
+      setOpenedDmIds((prev) => (prev.includes(chatId) ? prev : [chatId, ...prev]));
+    }
+    setSelectedChatId(chatId);
+    setMobileView('chat');
     setShowSearchModal(false);
   };
 
+  const handleOpenDirectChatWithUser = (userId: string) => {
+    if (!userId || userId === currentUser.id) return;
+    handleSelectChat(userId);
+  };
+
   const searchResults = searchQuery.trim()
-    ? allUsers.filter(u => {
+    ? allUsers.filter((u) => {
         if (u.id === currentUser.id) return false;
         const q = searchQuery.toLowerCase().trim();
         return (
@@ -296,9 +534,21 @@ export const ChatView: React.FC<ChatViewProps> = ({
       })
     : [];
 
+  // Dynamic live status next to "|" in chat header
+  const recorder = activeTypers.find((t) => t.status === 'recording');
+  const typer = activeTypers.find((t) => t.status === 'typing');
+  const liveRightText = recorder
+    ? selectedChatId === 'general'
+      ? `${recorder.userName} ovozli xabar yubormoqda...`
+      : 'ovozli xabar yubormoqda...'
+    : typer
+    ? selectedChatId === 'general'
+      ? `${typer.userName} yozmoqda...`
+      : 'yozmoqda...'
+    : null;
+
   return (
-    <div className="p-4 sm:p-6 h-full flex flex-col md:flex-row gap-6 max-w-7xl mx-auto">
-      
+    <div className="p-2 sm:p-6 h-full flex flex-col md:flex-row gap-4 sm:gap-6 max-w-7xl mx-auto min-h-0">
       {/* Search User Modal */}
       {showSearchModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in">
@@ -308,7 +558,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 <Search className="w-5 h-5 text-blue-500" />
                 <h3 className="text-sm font-bold">Foydalanuvchini Qidirish</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setShowSearchModal(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 cursor-pointer"
               >
@@ -336,15 +586,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   Bunday ID yoki nomli foydalanuvchi topilmadi
                 </p>
               ) : (
-                searchResults.map(foundUser => (
+                searchResults.map((foundUser) => (
                   <div
                     key={foundUser.id}
                     className="p-3 rounded-2xl liquid-glass-subtle flex items-center justify-between"
                   >
                     <div className="flex items-center space-x-3">
-                      <img 
-                        src={foundUser.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${foundUser.username}`} 
-                        alt={foundUser.username} 
+                      <img
+                        src={
+                          foundUser.avatar ||
+                          `https://api.dicebear.com/7.x/identicon/svg?seed=${foundUser.username}`
+                        }
+                        alt={foundUser.username}
                         className="w-9 h-9 rounded-xl object-cover border border-slate-300 dark:border-white/15"
                       />
                       <div>
@@ -378,35 +631,62 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
       )}
 
-      {/* LEFT/CENTER: Active Chat Conversation Box */}
-      <div className="flex-1 rounded-3xl liquid-glass flex flex-col overflow-hidden">
-        
+      {/* LEFT/CENTER: Active Chat Conversation Box (Full-screen on mobile when mobileView === 'chat') */}
+      <div
+        className={`flex-1 rounded-3xl liquid-glass flex-col overflow-hidden min-h-0 ${
+          mobileView === 'chat' ? 'flex' : 'hidden md:flex'
+        }`}
+      >
         {/* Chat Header */}
-        <div className="p-4 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-white shadow-md ${
-              selectedChatId === 'general' ? 'bg-blue-600' : 'bg-purple-600'
-            }`}>
-              {selectedChatId === 'general' ? <Users className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+        <div className="p-3 sm:p-4 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+            {/* Mobile back button to Chat List */}
+            <button
+              type="button"
+              onClick={() => setMobileView('list')}
+              className="md:hidden p-2 rounded-xl liquid-glass-subtle text-slate-700 dark:text-slate-200 hover:text-blue-500 flex items-center space-x-1 cursor-pointer flex-shrink-0"
+              title="Chatlar ro'yxati"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span className="text-[11px] font-bold">Chatlar</span>
+            </button>
+
+            <div
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center font-bold text-white shadow-md flex-shrink-0 ${
+                selectedChatId === 'general' ? 'bg-blue-600' : 'bg-purple-600'
+              }`}
+            >
+              {selectedChatId === 'general' ? (
+                <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+              ) : (
+                <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
+              )}
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-                {selectedChatId === 'general' 
-                  ? 'Umumiy guruh chati' 
+
+            <div className="min-w-0">
+              <h2 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                {selectedChatId === 'general'
+                  ? 'Umumiy guruh chati'
                   : `${selectedUser?.firstName || selectedUser?.username || 'Foydalanuvchi'} (Shaxsiy Chat)`}
               </h2>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1.5 truncate">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {selectedChatId === 'general' 
-                    ? `Umumiy guruh | ${allUsers.length} ta a'zo faol` 
+                  {selectedChatId === 'general'
+                    ? `${allUsers.length} ta a'zo faol`
                     : `ID: ${selectedUser?.id || selectedChatId}`}
                 </span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                {liveRightText ? (
+                  <span className="text-[11px] font-semibold text-blue-500 dark:text-blue-400 animate-pulse truncate">
+                    | {liveRightText}
+                  </span>
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                )}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-shrink-0">
             <button
               onClick={() => setShowSearchModal(true)}
               className="px-3 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/15 hover:bg-blue-500/25 text-blue-600 dark:text-blue-400 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
@@ -422,7 +702,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
         </div>
 
         {/* Message Feed */}
-        <div className="flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
+        <div className="flex-1 p-3.5 sm:p-6 overflow-y-auto space-y-4 min-h-0">
           {filteredMessages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500 dark:text-slate-400 space-y-2">
               <div className="w-12 h-12 rounded-2xl liquid-glass-subtle flex items-center justify-center text-slate-500 dark:text-slate-400">
@@ -430,8 +710,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </div>
               <p className="text-xs font-semibold">Bu yerda xabarlar yo'q</p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                {selectedChatId === 'general' 
-                  ? 'Birinchi bo\'lib xabar yoki ovozli xabar yuboring!'
+                {selectedChatId === 'general'
+                  ? "Birinchi bo'lib xabar yoki ovozli xabar yuboring!"
                   : 'Ushbu foydalanuvchiga birinchi shaxsiy xabaringizni yuboring!'}
               </p>
             </div>
@@ -439,15 +719,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
             filteredMessages.map((msg) => {
               const isMine = msg.senderId === currentUser.id;
               const isVoice = Boolean(msg.audioUrl);
-              const sender = allUsers.find(u => u.id === msg.senderId);
-              const senderAvatar = msg.senderAvatar || sender?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${msg.senderName}`;
+              const sender = allUsers.find((u) => u.id === msg.senderId);
+              const senderAvatar =
+                msg.senderAvatar ||
+                sender?.avatar ||
+                `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(msg.senderName)}`;
 
               return (
-                <div 
-                  key={msg.id}
-                  className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
-                >
-                  <div className={`flex items-center space-x-2 mb-1 px-1 text-[11px] text-slate-500 dark:text-slate-400 ${isMine ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                <div key={msg.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
+                  <div
+                    className={`flex items-center space-x-2 mb-1 px-1 text-[11px] text-slate-500 dark:text-slate-400 ${
+                      isMine ? 'flex-row-reverse space-x-reverse' : ''
+                    }`}
+                  >
                     <button
                       type="button"
                       onClick={() => !isMine && handleOpenDirectChatWithUser(msg.senderId)}
@@ -456,9 +740,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         !isMine ? 'cursor-pointer hover:ring-2 hover:ring-blue-500' : 'cursor-default'
                       }`}
                     >
-                      <img 
-                        src={senderAvatar} 
-                        alt={msg.senderName} 
+                      <img
+                        src={senderAvatar}
+                        alt={msg.senderName}
                         className="w-5 h-5 rounded-full object-cover border border-slate-300 dark:border-white/20"
                       />
                     </button>
@@ -469,7 +753,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       className={`font-semibold hover:underline ${
                         isMine ? 'text-blue-600 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200 cursor-pointer'
                       }`}
-                      title={!isMine ? "Shaxsiy xabar yozish" : undefined}
+                      title={!isMine ? 'Shaxsiy xabar yozish' : undefined}
                     >
                       {msg.senderName}
                     </button>
@@ -478,22 +762,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       {msg.senderRole}
                     </span>
 
-                    {sender && (
-                      <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400">
-                        ({sender.id})
-                      </span>
-                    )}
-
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                      {msg.timestamp}
+                    <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400">
+                      ({sender?.id || msg.senderId})
                     </span>
+
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">{msg.timestamp}</span>
                   </div>
 
-                  <div className={`max-w-[85%] sm:max-w-md p-3.5 rounded-2xl text-xs sm:text-sm font-medium shadow-sm transition ${
-                    isMine 
-                      ? 'bg-blue-600/95 text-white rounded-tr-xs' 
-                      : 'liquid-glass-subtle text-slate-900 dark:text-slate-100 rounded-tl-xs'
-                  }`}>
+                  <div
+                    className={`max-w-[85%] sm:max-w-md p-3.5 rounded-2xl text-xs sm:text-sm font-medium shadow-sm transition ${
+                      isMine
+                        ? 'bg-blue-600/95 text-white rounded-tr-xs'
+                        : 'liquid-glass-subtle text-slate-900 dark:text-slate-100 rounded-tl-xs'
+                    }`}
+                  >
                     {msg.attachmentUrl && (
                       <div className="mb-2 rounded-xl overflow-hidden max-h-48 border border-white/20">
                         <img src={msg.attachmentUrl} alt="Fayl" className="w-full object-cover" />
@@ -506,8 +788,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           type="button"
                           onClick={() => handlePlayVoice(msg.id, msg.audioUrl!)}
                           className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 cursor-pointer shadow-md transition active:scale-95 ${
-                            isMine 
-                              ? 'bg-white text-blue-600 hover:bg-blue-50' 
+                            isMine
+                              ? 'bg-white text-blue-600 hover:bg-blue-50'
                               : 'bg-blue-600 text-white hover:bg-blue-500'
                           }`}
                         >
@@ -521,8 +803,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         <div className="flex-1 space-y-1">
                           <div className="flex items-center space-x-1 h-4">
                             {[40, 70, 30, 90, 60, 45, 80, 50, 65, 35, 75, 45, 85].map((h, idx) => (
-                              <span 
-                                key={idx} 
+                              <span
+                                key={idx}
                                 className={`w-1 rounded-full transition-all ${
                                   playingAudioId === msg.id ? 'animate-pulse' : ''
                                 } ${isMine ? 'bg-white/80' : 'bg-blue-500'}`}
@@ -531,7 +813,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
                             ))}
                           </div>
                           <div className={`text-[10px] font-mono ${isMine ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                            {msg.audioDuration ? `${Math.floor(msg.audioDuration / 60)}:${(msg.audioDuration % 60).toString().padStart(2, '0')}` : '0:05'}
+                            {msg.audioDuration
+                              ? `${Math.floor(msg.audioDuration / 60)}:${(msg.audioDuration % 60)
+                                  .toString()
+                                  .padStart(2, '0')}`
+                              : '0:05'}
                           </div>
                         </div>
                       </div>
@@ -553,8 +839,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <ImageIcon className="w-3.5 h-3.5" />
               <span>Rasm biriktirildi</span>
             </span>
-            <button 
-              onClick={() => setAttachmentUrl('')} 
+            <button
+              onClick={() => setAttachmentUrl('')}
               className="text-slate-400 hover:text-rose-500 font-bold cursor-pointer"
             >
               ×
@@ -602,19 +888,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
               >
                 <Paperclip className="w-4 h-4" />
               </button>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                accept="image/*" 
-                onChange={handleFileUpload} 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
               />
 
-              <input 
+              <input
                 type="text"
                 placeholder="Xabar yozing..."
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 className="flex-grow px-4 py-2.5 rounded-xl liquid-glass-subtle text-xs sm:text-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-500 transition"
               />
 
@@ -637,11 +923,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </form>
           )}
         </div>
-
       </div>
 
-      {/* RIGHT SIDEBAR: Chat List */}
-      <div className="w-full md:w-72 rounded-3xl liquid-glass p-4 flex flex-col space-y-4 overflow-y-auto">
+      {/* RIGHT SIDEBAR / MOBILE FULL-SCREEN LIST VIEW */}
+      <div
+        className={`w-full md:w-72 rounded-3xl liquid-glass p-4 flex-col space-y-4 overflow-y-auto min-h-0 flex-1 md:flex-initial ${
+          mobileView === 'list' ? 'flex' : 'hidden md:flex'
+        }`}
+      >
         <div className="space-y-1.5">
           <div className="flex items-center justify-between px-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -658,21 +947,29 @@ export const ChatView: React.FC<ChatViewProps> = ({
           </div>
 
           <button
-            onClick={() => setSelectedChatId('general')}
+            onClick={() => handleSelectChat('general')}
             className={`w-full p-3 rounded-2xl flex items-center space-x-3 transition cursor-pointer text-left ${
               selectedChatId === 'general'
                 ? 'bg-blue-600 text-white shadow-md'
                 : 'liquid-glass-subtle text-slate-800 dark:text-slate-200 hover:border-blue-500/40'
             }`}
           >
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
-              selectedChatId === 'general' ? 'bg-white/20 text-white' : 'bg-blue-600/15 text-blue-600 dark:text-blue-400'
-            }`}>
+            <div
+              className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold ${
+                selectedChatId === 'general'
+                  ? 'bg-white/20 text-white'
+                  : 'bg-blue-600/15 text-blue-600 dark:text-blue-400'
+              }`}
+            >
               <Users className="w-4 h-4" />
             </div>
             <div className="flex-grow truncate">
               <h4 className="text-xs font-bold truncate">Umumiy guruh chati</h4>
-              <p className={`text-[10px] truncate ${selectedChatId === 'general' ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
+              <p
+                className={`text-[10px] truncate ${
+                  selectedChatId === 'general' ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'
+                }`}
+              >
                 Barcha a'zolar bilan suhbat
               </p>
             </div>
@@ -705,29 +1002,38 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 return (
                   <button
                     key={member.id}
-                    onClick={() => setSelectedChatId(member.id)}
+                    onClick={() => handleSelectChat(member.id)}
                     className={`w-full p-2.5 rounded-2xl flex items-center space-x-3 transition cursor-pointer text-left ${
                       isSelected
                         ? 'bg-blue-600 text-white shadow-md'
                         : 'liquid-glass-subtle text-slate-800 dark:text-slate-200'
                     }`}
                   >
-                    <img 
-                      src={member.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${member.username}`} 
-                      alt={member.firstName} 
-                      className="w-8 h-8 rounded-xl object-cover border border-slate-300 dark:border-white/20" 
+                    <img
+                      src={
+                        member.avatar ||
+                        `https://api.dicebear.com/7.x/identicon/svg?seed=${member.username}`
+                      }
+                      alt={member.firstName}
+                      className="w-8 h-8 rounded-xl object-cover border border-slate-300 dark:border-white/20"
                     />
                     <div className="flex-grow truncate">
                       <h4 className="text-xs font-bold truncate">
                         {member.firstName || member.username} {member.lastName || ''}
                       </h4>
                       <div className="flex items-center space-x-1.5">
-                        <span className={`text-[9px] font-mono ${isSelected ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <span
+                          className={`text-[9px] font-mono ${
+                            isSelected ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
                           {member.id}
                         </span>
-                        <span className={`text-[9px] uppercase font-bold tracking-wider ${
-                          isSelected ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'
-                        }`}>
+                        <span
+                          className={`text-[9px] uppercase font-bold tracking-wider ${
+                            isSelected ? 'text-blue-100' : 'text-blue-600 dark:text-blue-400'
+                          }`}
+                        >
                           • {member.role}
                         </span>
                       </div>
@@ -739,7 +1045,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
           )}
         </div>
       </div>
-
     </div>
   );
 };

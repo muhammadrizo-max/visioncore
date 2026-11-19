@@ -27,6 +27,7 @@ import { MembersView } from './components/MembersView';
 import { BroadcastView } from './components/BroadcastView';
 import { ProfileView } from './components/ProfileView';
 import { SettingsView } from './components/SettingsView';
+import { StatisticsView } from './components/StatisticsView';
 import { MatrixRain } from './components/MatrixRain';
 
 export default function App() {
@@ -204,7 +205,14 @@ export default function App() {
     if (data.projects) setProjects(data.projects);
     if (data.tasks) setTasks(data.tasks);
     if (data.notes) setNotes(data.notes);
-    if (data.chats) setChats(data.chats);
+    if (data.chats) {
+      setChats([...data.chats].sort((a, b) => {
+        const tsA = a.createdAt ? Date.parse(a.createdAt) : 0;
+        const tsB = b.createdAt ? Date.parse(b.createdAt) : 0;
+        if (tsA && tsB && tsA !== tsB) return tsA - tsB;
+        return a.id.localeCompare(b.id);
+      }));
+    }
     if (data.reminders) setReminders(data.reminders);
     if (data.activities) setActivities(data.activities);
     if (data.notifications) setNotifications(data.notifications);
@@ -342,7 +350,10 @@ export default function App() {
   };
 
   const handleUpdateMember = (updatedUser: User) => {
-    setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
+    setUsers(prev => {
+      const exists = prev.some(u => u.id === updatedUser.id);
+      return exists ? prev.map(u => u.id === updatedUser.id ? updatedUser : u) : [...prev, updatedUser];
+    });
     if (currentUser && currentUser.id === updatedUser.id) {
       setCurrentUser(updatedUser);
     }
@@ -361,7 +372,9 @@ export default function App() {
       if (prev.some(m => m.id === msg.id)) return prev;
       return [...prev, msg];
     });
-    void sbSync.upsertChat(msg);
+    if (currentUser && msg.senderId === currentUser.id) {
+      void sbSync.upsertChat(msg);
+    }
   };
 
   const handleEditMessage = (msgId: string, newText: string) => {
@@ -666,6 +679,18 @@ export default function App() {
               onDeleteReminder={handleDeleteReminder}
               onNavigateMenu={setActiveMenu}
               onMarkBroadcastRead={handleMarkBroadcastRead}
+              darkMode={darkMode}
+            />
+          )}
+
+          {activeMenu === 'Statistika' && isCreator && (
+            <StatisticsView
+              allUsers={users}
+              projects={projects}
+              orders={orders}
+              tasks={tasks}
+              siteSettings={siteSettings}
+              activities={activities}
               darkMode={darkMode}
             />
           )}

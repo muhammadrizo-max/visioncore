@@ -867,7 +867,33 @@ app.post('/api/db/notifications/clear', requireCreator, asyncRoute(async (_req, 
   res.json({ ok: true });
 }));
 
-// ---------- Chats compatibility endpoints ----------
+// ---------- Chats compatibility & live typing/recording presence ----------
+interface PresenceEntry {
+  userId: string;
+  userName: string;
+  chatKey: string;
+  status: 'typing' | 'recording';
+  expiresAt: number;
+}
+const chatPresence = new Map<string, PresenceEntry>();
+
+function canonicalChatKey(rawChatId: string): string {
+  const id = str(rawChatId || 'general', 120);
+  if (id === 'general') return 'general';
+  if (id.startsWith('direct::')) {
+    const parts = id.slice(8).split('::').filter(Boolean);
+    if (parts.length === 2) return `direct::${[parts[0], parts[1]].sort().join('::')}`;
+  }
+  if (id.startsWith('direct_')) {
+    const body = id.slice(7);
+    const matches = body.match(/vcg[-_]\d+/gi);
+    if (matches && matches.length === 2) {
+      return `direct::${[matches[0], matches[1]].sort().join('::')}`;
+    }
+  }
+  return id;
+}
+
 app.get('/api/chats', requireAuth, asyncRoute(async (req, res) => {
   const session = sessionOf(req);
   const safeSub = ilikeEscape(session.sub);
@@ -886,6 +912,7 @@ app.get('/api/chats', requireAuth, asyncRoute(async (req, res) => {
       senderAvatar: r.sender_avatar,
       text: r.text,
       timestamp: r.timestamp_label || new Date(r.created_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+      createdAt: r.created_at,
       chatId: r.chat_id || 'general',
       attachmentUrl: r.attachment_url,
       isEdited: Boolean(r.is_edited),
@@ -902,6 +929,11 @@ app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
     fail(res, 400, 'Xabar formati noto\'g\'ri');
     return;
   }
+  const parsedCreatedAt =
+    typeof m.createdAt === 'string' && !Number.isNaN(Date.parse(m.createdAt))
+      ? new Date(m.createdAt).toISOString()
+      : new Date().toISOString();
+
   const { error } = await db.from('chats').upsert({
     id: str(m.id, 80),
     sender_id: session.sub,
@@ -915,14 +947,55 @@ app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
     is_edited: Boolean(m.isEdited),
     audio_url: typeof m.audioUrl === 'string' ? m.audioUrl : null,
     audio_duration: Number(m.audioDuration) || 0,
-    created_at: new Date().toISOString(),
+    created_at: parsedCreatedAt,
   });
   if (error) {
     fail(res, 500, error.message);
     return;
   }
+  // Clear sender presence immediately after sending message
+  chatPresence.delete(`${session.sub}::${canonicalChatKey(str(m.chatId || 'general', 120))}`);
   res.json({ ok: true });
 }));
+
+app.post('/api/chats/presence', requireAuth, (req, res) => {
+  const session = sessionOf(req);
+  const chatKey = canonicalChatKey(str(req.body?.chatId || 'general', 120));
+  const status = req.body?.status;
+  const userName = str(req.body?.userName, 100) || session.username;
+  const entryKey = `${session.sub}::${chatKey}`;
+
+  if (status === 'typing' || status === 'recording') {
+    chatPresence.set(entryKey, {
+      userId: session.sub,
+      userName,
+      chatKey,
+      status,
+      expiresAt: Date.now() + 4500,
+    });
+  } else {
+    chatPresence.delete(entryKey);
+  }
+  res.json({ ok: true });
+});
+
+app.get('/api/chats/presence', requireAuth, (req, res) => {
+  const session = sessionOf(req);
+  const chatKey = canonicalChatKey(str(req.query.chatId || 'general', 120));
+  const now = Date.now();
+  const active: { userId: string; userName: string; status: 'typing' | 'recording' }[] = [];
+
+  for (const [k, v] of chatPresence.entries()) {
+    if (v.expiresAt <= now) {
+      chatPresence.delete(k);
+      continue;
+    }
+    if (v.chatKey === chatKey && v.userId !== session.sub) {
+      active.push({ userId: v.userId, userName: v.userName, status: v.status });
+    }
+  }
+  res.json({ active });
+});
 
 // ---------- AI Multi-Engine Search ----------
 async function queryGemini(query: string, apiKey?: string): Promise<string> {

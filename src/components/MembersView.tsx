@@ -1,7 +1,8 @@
 import { PasswordAdminPanel } from './PasswordAdminPanel';
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Users, UserPlus, Activity, TrendingUp, Clock, Shield, Search } from 'lucide-react';
 import { User, MemberActivity, Task, Order } from '../types';
+import { api } from '../lib/api';
 
 interface MembersViewProps {
   currentUser: User;
@@ -62,14 +63,21 @@ export const MembersView: React.FC<MembersViewProps> = ({
   const teamMembers = allUsers.filter((u) => u.role !== 'user');
   const regularUsers = allUsers.filter((u) => u.role === 'user');
 
-  const handleLookup = (e: React.FormEvent) => {
+  const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const id = lookupId.trim().toLowerCase();
+    const id = lookupId.replace(/\s+/g, '').toLowerCase();
     if (!id) {
       setStatusMsg('Foydalanuvchi ID sini kiriting!');
       return;
     }
-    const found = allUsers.find((u) => u.id.toLowerCase() === id);
+    let found: User | null = allUsers.find((u) => u.id.toLowerCase() === id) || null;
+    if (!found) {
+      try {
+        found = await api<User>(`/api/admin/lookup?id=${encodeURIComponent(id)}`);
+      } catch {
+        found = null;
+      }
+    }
     if (!found) {
       setFoundUser(null);
       setStatusMsg(`"${lookupId.trim()}" ID bilan foydalanuvchi topilmadi. U avval saytda ro'yxatdan o'tishi kerak.`);
@@ -248,70 +256,78 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
       {activeTab === 'manage' && (
         <div className="space-y-6">
-          <PasswordAdminPanel onStatus={setStatusMsg} />
-          {/* ID orqali qo'shish */}
-          <div className="p-6 rounded-3xl liquid-glass space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-              <Search className="w-4 h-4 text-blue-500" />
-              <span>ID orqali a'zo qo'shish</span>
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Oddiy foydalanuvchi saytda o'zi ro'yxatdan o'tadi va o'z ID sini sizga beradi. Shu ID ni kiritib, uni rol bilan jamoaga qo'shing.
-            </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+            <PasswordAdminPanel onStatus={setStatusMsg} />
 
-            <form onSubmit={handleLookup} className="flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                placeholder="vcg-XXXXXXXX"
-                value={lookupId}
-                onChange={(e) => {
-                  setLookupId(e.target.value);
-                  setFoundUser(null);
-                }}
-                className="flex-1 px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-              />
-              <button
-                type="submit"
-                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition shadow-md active:scale-95 cursor-pointer"
-              >
-                Qidirish
-              </button>
-            </form>
+            {/* ID orqali qo'shish */}
+            <div className="p-6 rounded-3xl liquid-glass space-y-4 h-full flex flex-col justify-between">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                    <Search className="w-4 h-4 text-blue-500" />
+                    <span>ID orqali a'zo qo'shish</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Oddiy foydalanuvchi saytda o'zi ro'yxatdan o'tadi va o'z ID sini sizga beradi. Shu ID ni kiritib, uni rol bilan jamoaga qo'shing.
+                  </p>
+                </div>
 
-            {foundUser && (
-              <div className="p-4 rounded-2xl liquid-glass-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center space-x-3">
-                  <img src={foundUser.avatar} alt={foundUser.username} className="w-10 h-10 rounded-full object-cover border border-slate-300 dark:border-white/20" />
-                  <div>
-                    <div className="font-bold text-sm text-slate-900 dark:text-white">
-                      {foundUser.firstName || foundUser.username} {foundUser.lastName}
-                    </div>
-                    <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                      {foundUser.id} · {foundUser.username}
+                <form onSubmit={handleLookup} className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    type="text"
+                    placeholder="vcg-XXXXXXXX"
+                    value={lookupId}
+                    onChange={(e) => {
+                      setLookupId(e.target.value);
+                      setFoundUser(null);
+                    }}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl liquid-glass-subtle text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    <span>Qidirish</span>
+                  </button>
+                </form>
+              </div>
+
+              {foundUser && (
+                <div className="p-4 rounded-2xl liquid-glass-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
+                    <img src={foundUser.avatar} alt={foundUser.username} className="w-10 h-10 rounded-full object-cover border border-slate-300 dark:border-white/20" />
+                    <div>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">
+                        {foundUser.firstName || foundUser.username} {foundUser.lastName}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                        {foundUser.id} · {foundUser.username}
+                      </div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={lookupRole}
+                      onChange={(e) => setLookupRole(e.target.value as TeamRoleType)}
+                      className="px-3 py-2 rounded-xl liquid-glass-subtle text-xs font-bold cursor-pointer"
+                    >
+                      {TEAM_ROLES.map((r) => (
+                        <option key={r} value={r} className="bg-slate-900 text-white">
+                          {r.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAddToWorkspace}
+                      className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md active:scale-95 cursor-pointer"
+                    >
+                      Jamoaga qo'shish
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={lookupRole}
-                    onChange={(e) => setLookupRole(e.target.value as TeamRoleType)}
-                    className="px-3 py-2 rounded-xl liquid-glass-subtle text-xs font-bold cursor-pointer"
-                  >
-                    {TEAM_ROLES.map((r) => (
-                      <option key={r} value={r} className="bg-slate-900 text-white">
-                        {r.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={handleAddToWorkspace}
-                    className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md active:scale-95 cursor-pointer"
-                  >
-                    Jamoaga qo'shish
-                  </button>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Jamoa a'zolari */}

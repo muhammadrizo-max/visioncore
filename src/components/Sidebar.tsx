@@ -14,7 +14,8 @@ import {
   Cpu,
   GitBranch,
   FileSpreadsheet,
-  Megaphone
+  Megaphone,
+  BarChart3
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -43,6 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   if (user.role === 'creator') {
     menuList.push({ name: 'Bosh sahifa', displayName: 'Bosh sahifa', icon: LayoutDashboard });
+    menuList.push({ name: 'Statistika', displayName: 'Statistika', icon: BarChart3 });
     menuList.push({ name: 'Mijoz Buyurtmalari', displayName: 'Mijoz Buyurtmalari', icon: ShoppingBag });
     menuList.push({ name: 'A\'zolar', displayName: 'A\'zolar', icon: Users });
     menuList.push({ name: 'Broadcast', displayName: 'Xabar tarqatish', icon: Megaphone });

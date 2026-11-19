@@ -123,6 +123,7 @@ export async function fetchAllFromSupabase(): Promise<SupabaseSyncPayload | null
         senderAvatar: r.sender_avatar,
         text: r.text,
         timestamp: r.timestamp_label || LOCAL_TIME(r.created_at),
+        createdAt: r.created_at,
         chatId: r.chat_id || 'general',
         attachmentUrl: r.attachment_url,
         isEdited: Boolean(r.is_edited),
@@ -285,7 +286,7 @@ export const sbSync = {
       is_edited: Boolean(m.isEdited),
       audio_url: m.audioUrl || null,
       audio_duration: m.audioDuration || 0,
-      created_at: new Date().toISOString(),
+      created_at: m.createdAt || new Date().toISOString(),
     }),
   deleteChat: (id: string) => remove('chats', id),
 

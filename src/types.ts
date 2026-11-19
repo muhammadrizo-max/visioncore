@@ -141,6 +141,7 @@ export interface ChatMessage {
   senderAvatar?: string;
   text: string;
   timestamp: string;
+  createdAt?: string;
   chatId: string;
   attachmentUrl?: string;
   isEdited?: boolean;

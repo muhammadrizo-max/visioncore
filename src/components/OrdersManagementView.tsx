@@ -86,6 +86,25 @@ export const OrdersManagementView: React.FC<OrdersManagementViewProps> = ({
         </div>
       </div>
 
+      {/* Overall Orders Statistics Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[
+          { label: 'Jami buyurtmalar', value: orders.length, color: 'text-slate-900 dark:text-white' },
+          { label: 'Kutilmoqda', value: orders.filter(o => o.status === 'pending').length, color: 'text-amber-600 dark:text-amber-400' },
+          { label: "Ko'rib chiqilmoqda", value: orders.filter(o => o.status === 'in_review').length, color: 'text-indigo-600 dark:text-indigo-400' },
+          { label: 'Qabul qilindi', value: orders.filter(o => o.status === 'accepted').length, color: 'text-blue-600 dark:text-blue-400' },
+          { label: 'Jarayonda', value: orders.filter(o => o.status === 'in_progress').length, color: 'text-purple-600 dark:text-purple-400' },
+          { label: 'Bajarildi', value: orders.filter(o => o.status === 'completed').length, color: 'text-emerald-600 dark:text-emerald-400' },
+        ].map((stat) => (
+          <div key={stat.label} className="p-3.5 rounded-2xl liquid-glass space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block truncate">
+              {stat.label}
+            </span>
+            <div className={`text-xl font-black ${stat.color}`}>{stat.value} ta</div>
+          </div>
+        ))}
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="p-4 rounded-3xl liquid-glass flex flex-col md:flex-row gap-3 items-center justify-between">
         <div className="relative w-full md:w-80">
