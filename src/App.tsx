@@ -133,10 +133,27 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Site Settings
+  // Site Settings (strip legacy port-1..port-8 dummy portfolio cache once)
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
     const saved = localStorage.getItem('visioncore_site_settings');
-    return saved ? JSON.parse(saved) : INITIAL_SITE_SETTINGS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as SiteSettings;
+        if (!localStorage.getItem('visioncore_clean_portfolio_v2')) {
+          localStorage.setItem('visioncore_clean_portfolio_v2', 'true');
+          const dummyIds = new Set(['port-1', 'port-2', 'port-3', 'port-4', 'port-5', 'port-6', 'port-7', 'port-8']);
+          if (Array.isArray(parsed.portfolio)) {
+            parsed.portfolio = parsed.portfolio.filter((item) => !dummyIds.has(item.id));
+            localStorage.setItem('visioncore_site_settings', JSON.stringify(parsed));
+          }
+        }
+        return parsed;
+      } catch {
+        return INITIAL_SITE_SETTINGS;
+      }
+    }
+    localStorage.setItem('visioncore_clean_portfolio_v2', 'true');
+    return INITIAL_SITE_SETTINGS;
   });
 
   const [activeMenu, setActiveMenu] = useState<string>('Bosh sahifa');
@@ -270,7 +287,7 @@ export default function App() {
       const exists = prev.some(u => u.id === user.id);
       return exists ? prev.map(u => (u.id === user.id ? user : u)) : [...prev, user];
     });
-    void sbSync.upsertUser(user);
+    void syncWithSupabase();
     setActiveMenu('Bosh sahifa');
     logActivity(isNewRegistration ? 'Platformada ro\'yxatdan o\'tdi' : 'Tizimga muvaffaqiyatli kirdi', user);
     if (isNewRegistration && user.role === 'user') {

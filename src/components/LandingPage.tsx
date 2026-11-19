@@ -1,4 +1,3 @@
-import { ForgotPassword } from './ForgotPassword';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Rocket,
@@ -241,10 +240,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     }
   };
 
-  const portfolioItems =
-    siteSettings?.portfolio && siteSettings.portfolio.length > 0
-      ? siteSettings.portfolio
-      : INITIAL_SITE_SETTINGS.portfolio || [];
+  const portfolioItems = siteSettings?.portfolio || [];
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-600 selection:text-white dark">
@@ -440,6 +436,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             >
               {/* FRONT FACE: RO'YXATDAN O'TISH (Left half Techscape VisionCore Logo BG) */}
               <div className="coin-face coin-front">
+                <div className="coin-bg-layer coin-bg-front" aria-hidden="true" />
                 {!(isVerified && verifiedAction === 'register') ? (
                   <div className="w-full max-w-[280px] flex flex-col items-center relative z-10">
                     <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white drop-shadow">
@@ -507,7 +504,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       >
                         Kirish
                       </button>
-                      <ForgotPassword />
                     </p>
                   </div>
                 ) : (
@@ -543,6 +539,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               {/* BACK FACE: TIZIMGA KIRISH (Right half Techscape Globe BG) */}
               <div className="coin-face coin-back">
+                <div className="coin-bg-layer coin-bg-back" aria-hidden="true" />
                 {!(isVerified && verifiedAction === 'login') ? (
                   <div className="w-full max-w-[280px] flex flex-col items-center relative z-10">
                     <h2 className="text-lg sm:text-xl font-extrabold tracking-tight text-white drop-shadow">

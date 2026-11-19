@@ -205,7 +205,7 @@ interface UserRow {
   created_at?: string | null;
 }
 
-const toPublicUser = (row: UserRow) => ({
+const toPublicUser = (row: UserRow & { registered_at?: string | null }) => ({
   id: row.id,
   username: row.username,
   firstName: row.first_name ?? '',
@@ -215,7 +215,7 @@ const toPublicUser = (row: UserRow) => ({
   telegramUsername: row.telegram_username ?? '',
   role: row.role,
   avatar: row.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(row.username)}`,
-  registeredAt: row.created_at ?? null,
+  registeredAt: row.created_at ?? row.registered_at ?? null,
 });
 
 type PublicUser = ReturnType<typeof toPublicUser>;
@@ -226,24 +226,49 @@ const issueToken = (user: PublicUser) =>
 async function ensureOwnerRow(): Promise<UserRow> {
   const { data } = await db.from('users').select('*').eq('id', OWNER_ID).maybeSingle();
   if (data) return data as UserRow;
-  const { data: created, error } = await db
+
+  const baseOwner: Record<string, unknown> = {
+    id: OWNER_ID,
+    username: OWNER_USERNAME,
+    role: 'creator',
+    first_name: 'Boshliq',
+    last_name: '(Creator)',
+    phone: '+998 90 000 00 00',
+    email: 'creator@visioncore.group',
+    telegram_username: '@visioncore_creator',
+    avatar: '',
+  };
+
+  // Try modern column (created_at) first, then legacy (registered_at), and never block login on schema mismatch
+  const firstTry = await db
     .from('users')
-    .insert({
-      id: OWNER_ID,
-      username: OWNER_USERNAME,
-      role: 'creator',
-      first_name: 'Boshliq',
-      last_name: '(Creator)',
-      phone: '+998 90 000 00 00',
-      email: 'creator@visioncore.group',
-      telegram_username: '@visioncore_creator',
-      avatar: '',
-      created_at: new Date().toISOString(),
-    })
+    .insert({ ...baseOwner, created_at: new Date().toISOString() })
     .select('*')
-    .single();
-  if (error) throw error;
-  return created as UserRow;
+    .maybeSingle();
+
+  if (firstTry.data) return firstTry.data as UserRow;
+
+  const fallbackTry = await db
+    .from('users')
+    .insert({ ...baseOwner, registered_at: new Date().toISOString() })
+    .select('*')
+    .maybeSingle();
+
+  if (fallbackTry.data) return fallbackTry.data as UserRow;
+
+  console.warn('[ensureOwnerRow] DB insert skipped:', firstTry.error?.message || fallbackTry.error?.message);
+  return {
+    id: OWNER_ID,
+    username: OWNER_USERNAME,
+    role: 'creator',
+    first_name: 'Boshliq',
+    last_name: '(Creator)',
+    phone: '+998 90 000 00 00',
+    email: 'creator@visioncore.group',
+    telegram_username: '@visioncore_creator',
+    avatar: '',
+    created_at: new Date().toISOString(),
+  };
 }
 
 // ---------- Jadval siyosati ----------
@@ -326,7 +351,11 @@ app.use('/api', (req, res, next) => {
     return;
   }
   if (!DB_READY || !AUTH_READY) {
-    fail(res, 503, "Server sozlanmagan: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY va SESSION_SECRET ni tekshiring");
+    const missing: string[] = [];
+    if (!SUPABASE_URL.startsWith('http')) missing.push('SUPABASE_URL');
+    if (!SUPABASE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+    if (SESSION_SECRET.length < 32) missing.push('SESSION_SECRET (kamida 32 belgi)');
+    fail(res, 503, `Server muhit o'zgaruvchilari yetishmayapti: ${missing.join(', ')}`);
     return;
   }
   next();
@@ -358,7 +387,9 @@ app.get('/api/config', asyncRoute(async (_req, res) => {
   if (DB_READY) {
     try {
       const { data } = await db.from('site_settings').select('data').eq('id', 'default').maybeSingle();
-      if (data?.data) siteSettings = data.data;
+      if (data?.data && typeof data.data === 'object') {
+        siteSettings = data.data;
+      }
     } catch {
       // ignore
     }
@@ -376,24 +407,27 @@ app.post('/api/auth/login', loginLimiter, asyncRoute(async (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   const invalid = () => fail(res, 401, "Login yoki parol noto'g'ri kiritildi!");
 
-  if (!USERNAME_RE.test(username) || !password || password.length > 200) {
+  if (!username || !password || password.length > 200) {
     fail(res, 400, "Login va parolni to'g'ri kiriting!");
     return;
   }
 
-  // 1. Master Owner credentials check
+  // 1. Master Owner credentials check (from server / Vercel environment variables)
   if (OWNER_ENABLED && OWNER_PASSWORD_HASH && username === OWNER_USERNAME) {
-    if (!verifyPassword(password, OWNER_PASSWORD_HASH)) {
-      invalid();
+    if (safeEqual(password, OWNER_PASSWORD) || verifyPassword(password, OWNER_PASSWORD_HASH)) {
+      const ownerRow = await ensureOwnerRow();
+      const user = toPublicUser(ownerRow);
+      res.json({ token: issueToken(user), user });
       return;
     }
-    const ownerRow = await ensureOwnerRow();
-    const user = toPublicUser(ownerRow);
-    res.json({ token: issueToken(user), user });
+  }
+
+  if (!USERNAME_RE.test(username)) {
+    invalid();
     return;
   }
 
-  // 2. Registered user / team member lookup
+  // 2. Registered user / team member lookup in Supabase
   const { data } = await db
     .from('users')
     .select('*')
@@ -528,52 +562,6 @@ app.post('/api/auth/check-username', checkUsernameLimiter, asyncRoute(async (req
   });
 }));
 
-app.post('/api/auth/forgot-password', registerLimiter, asyncRoute(async (req, res) => {
-  const username = normalizeUsername(req.body?.username);
-  const note = str(req.body?.note, 200);
-  if (!USERNAME_RE.test(username) || !note) {
-    fail(res, 400, "Login va aloqa ma'lumotini kiriting!");
-    return;
-  }
-
-  const { data: userRow } = await db
-    .from('users')
-    .select('id, username')
-    .ilike('username', ilikeEscape(username))
-    .maybeSingle();
-
-  if (userRow) {
-    await db.from('password_requests').insert({
-      id: `PR-${crypto.randomUUID()}`,
-      user_id: userRow.id,
-      username: userRow.username,
-      note,
-      resolved: false,
-      created_at: new Date().toISOString(),
-    });
-  }
-
-  res.json({
-    ok: true,
-    message: "So'rovingiz adminga yuborildi. Tez orada siz bilan bog'lanamiz.",
-  });
-}));
-
-// ---------- Admin / Creator Password & Lookup ----------
-app.get('/api/admin/password-requests', requireCreator, asyncRoute(async (_req, res) => {
-  const { data, error } = await db
-    .from('password_requests')
-    .select('id, user_id, username, note, created_at')
-    .eq('resolved', false)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    fail(res, 500, error.message);
-    return;
-  }
-  res.json(data ?? []);
-}));
-
 app.get('/api/admin/lookup', requireCreator, asyncRoute(async (req, res) => {
   const id = str(req.query.id, 30);
   if (!id) {
@@ -619,36 +607,6 @@ app.post('/api/admin/members/reset-password', requireCreator, asyncRoute(async (
     return;
   }
   res.json({ password: newPassword, username: userRow.username });
-}));
-
-app.post('/api/admin/password-requests/:id/resolve', requireCreator, asyncRoute(async (req, res) => {
-  const reqId = str(req.params.id, 80);
-  const { data: reqRow } = await db
-    .from('password_requests')
-    .select('*')
-    .eq('id', reqId)
-    .maybeSingle();
-
-  if (!reqRow) {
-    fail(res, 404, "So'rov topilmadi");
-    return;
-  }
-
-  const newPassword = `vcg_${crypto.randomBytes(5).toString('hex')}`;
-  const updatePayload: Record<string, unknown> = {
-    password_hash: hashPassword(newPassword),
-  };
-  const enc = encryptSecret(newPassword);
-  if (enc) updatePayload.password_enc = enc;
-
-  const { error: userErr } = await db.from('users').update(updatePayload).eq('id', reqRow.user_id);
-  if (userErr) {
-    fail(res, 500, userErr.message);
-    return;
-  }
-
-  await db.from('password_requests').update({ resolved: true }).eq('id', reqId);
-  res.json({ password: newPassword, username: reqRow.username });
 }));
 
 // ---------- Database Sync & CRUD ----------
