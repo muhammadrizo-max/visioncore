@@ -7,7 +7,7 @@ import {
   INITIAL_USERS, INITIAL_SITE_SETTINGS
 } from './mockData';
 import { fetchAllFromSupabase, sbSync } from './lib/supabase';
-import { getToken } from './lib/api';
+import { getToken, clearToken } from './lib/api';
 
 import { LandingPage } from './components/LandingPage';
 import { Header } from './components/Header';
@@ -201,6 +201,26 @@ export default function App() {
     return true;
   }, []);
 
+  useEffect(() => {
+    fetch('/api/config')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (cfg?.siteSettings) {
+          setSiteSettings((prev) => ({ ...prev, ...cfg.siteSettings }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser || !getToken()) return;
+    void syncWithSupabase();
+    const timer = setInterval(() => {
+      void syncWithSupabase();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [currentUser, syncWithSupabase]);
+
   const handleClearNotifications = () => {
     setNotifications([]);
     void sbSync.clearNotifications();
@@ -260,6 +280,7 @@ export default function App() {
 
   const handleLogout = () => {
     logActivity('Tizimdan chiqdi');
+    clearToken();
     setCurrentUser(null);
   };
 

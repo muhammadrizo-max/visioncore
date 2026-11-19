@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { User, ChatMessage } from '../types';
+import { api, apiPost, getToken } from '../lib/api';
 
 interface ChatViewProps {
   currentUser: User;
@@ -76,25 +77,23 @@ export const ChatView: React.FC<ChatViewProps> = ({
   // Periodic server sync for multi-client / multi-device real-time chat
   useEffect(() => {
     const fetchServerChats = async () => {
+      if (!getToken()) return;
       try {
-        const res = await fetch('/api/chats');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            data.forEach((serverMsg) => {
-              if (!chats.some(c => c.id === serverMsg.id)) {
-                onSendMessage(serverMsg);
-              }
-            });
-          }
+        const data = await api<ChatMessage[]>('/api/chats');
+        if (Array.isArray(data) && data.length > 0) {
+          data.forEach((serverMsg) => {
+            if (!chats.some(c => c.id === serverMsg.id)) {
+              onSendMessage(serverMsg);
+            }
+          });
         }
       } catch {
         // silent fallback
       }
     };
 
-    fetchServerChats();
-    const interval = setInterval(fetchServerChats, 2500);
+    void fetchServerChats();
+    const interval = setInterval(() => { void fetchServerChats(); }, 4000);
     return () => clearInterval(interval);
   }, [chats, onSendMessage]);
 
@@ -135,13 +134,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   const broadcastMessage = (msg: ChatMessage) => {
     onSendMessage(msg);
-    try {
-      fetch('/api/chats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(msg)
-      }).catch(() => {});
-    } catch {}
+    if (getToken()) {
+      void apiPost('/api/chats', msg).catch(() => {});
+    }
 
     try {
       const bc = new BroadcastChannel('visioncore_live_chats');

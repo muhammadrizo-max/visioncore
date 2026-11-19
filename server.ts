@@ -318,7 +318,7 @@ const TABLES: Record<string, TableCfg> = {
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '5mb' }));
 
 app.use('/api', (req, res, next) => {
   if (req.path === '/health' || req.path === '/config') {
@@ -332,6 +332,44 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+const pickColumns = (row: Record<string, unknown>, allowed: string[]) => {
+  const out: Record<string, unknown> = {};
+  for (const col of allowed) {
+    if (col in row && row[col] !== undefined) {
+      out[col] = row[col];
+    }
+  }
+  return out;
+};
+
+// ---------- Health & Config ----------
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    time: new Date().toISOString(),
+    dbReady: DB_READY,
+    authReady: AUTH_READY,
+    ownerEnabled: OWNER_ENABLED,
+  });
+});
+
+app.get('/api/config', asyncRoute(async (_req, res) => {
+  let siteSettings = null;
+  if (DB_READY) {
+    try {
+      const { data } = await db.from('site_settings').select('data').eq('id', 'default').maybeSingle();
+      if (data?.data) siteSettings = data.data;
+    } catch {
+      // ignore
+    }
+  }
+  res.json({
+    siteName: 'VisionCore Group',
+    authMode: 'backend',
+    siteSettings,
+  });
+}));
+
 // ---------- Auth ----------
 app.post('/api/auth/login', loginLimiter, asyncRoute(async (req, res) => {
   const username = normalizeUsername(req.body?.username);
@@ -339,4 +377,768 @@ app.post('/api/auth/login', loginLimiter, asyncRoute(async (req, res) => {
   const invalid = () => fail(res, 401, "Login yoki parol noto'g'ri kiritildi!");
 
   if (!USERNAME_RE.test(username) || !password || password.length > 200) {
-    fail(res, 400, "Login va parolni
+    fail(res, 400, "Login va parolni to'g'ri kiriting!");
+    return;
+  }
+
+  // 1. Master Owner credentials check
+  if (OWNER_ENABLED && OWNER_PASSWORD_HASH && username === OWNER_USERNAME) {
+    if (!verifyPassword(password, OWNER_PASSWORD_HASH)) {
+      invalid();
+      return;
+    }
+    const ownerRow = await ensureOwnerRow();
+    const user = toPublicUser(ownerRow);
+    res.json({ token: issueToken(user), user });
+    return;
+  }
+
+  // 2. Registered user / team member lookup
+  const { data } = await db
+    .from('users')
+    .select('*')
+    .ilike('username', ilikeEscape(username))
+    .maybeSingle();
+
+  if (!data) {
+    verifyPassword(password, DUMMY_HASH);
+    invalid();
+    return;
+  }
+
+  const row = data as UserRow;
+  let valid = false;
+  if (row.password_hash) {
+    valid = verifyPassword(password, row.password_hash);
+  } else if (row.password) {
+    valid = safeEqual(password, row.password);
+    if (valid) {
+      await db.from('users').update({ password_hash: hashPassword(password) }).eq('id', row.id);
+    }
+  } else {
+    verifyPassword(password, DUMMY_HASH);
+  }
+
+  if (!valid) {
+    invalid();
+    return;
+  }
+
+  const user = toPublicUser(row);
+  res.json({ token: issueToken(user), user });
+}));
+
+app.post('/api/auth/register', registerLimiter, asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body?.username);
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const firstName = str(req.body?.firstName, 100);
+  const lastName = str(req.body?.lastName, 100);
+  const phone = str(req.body?.phone, 50);
+  const email = str(req.body?.email, 150);
+  const telegramUsername = str(req.body?.telegramUsername, 100);
+  const rawId = str(req.body?.id, 30);
+  const rawRole = str(req.body?.role, 30);
+
+  if (!USERNAME_RE.test(username) || username.length < 3) {
+    fail(res, 400, "Username kamida 3 ta lotin harf/raqamdan iborat bo'lsin!");
+    return;
+  }
+  if (password.length < 6 || password.length > 200) {
+    fail(res, 400, "Parol kamida 6 ta belgidan iborat bo'lsin!");
+    return;
+  }
+  if (OWNER_ENABLED && username === OWNER_USERNAME) {
+    fail(res, 409, 'Ushbu username band!');
+    return;
+  }
+
+  const { data: existing } = await db
+    .from('users')
+    .select('id')
+    .ilike('username', ilikeEscape(username))
+    .maybeSingle();
+
+  if (existing) {
+    fail(res, 409, 'Ushbu username band!');
+    return;
+  }
+
+  const callerSession = sessionFrom(req);
+  const assignedRole =
+    callerSession?.role === 'creator' && ROLES.includes(rawRole) ? rawRole : 'user';
+
+  const id = MEMBER_ID_RE.test(rawId)
+    ? rawId
+    : `vcg-${Math.floor(10000000 + Math.random() * 90000000)}`;
+
+  const passwordHash = hashPassword(password);
+  const passwordEnc = encryptSecret(password);
+
+  const insertPayload: Record<string, unknown> = {
+    id,
+    username,
+    password_hash: passwordHash,
+    first_name: firstName,
+    last_name: lastName,
+    phone,
+    email,
+    telegram_username: telegramUsername,
+    role: assignedRole,
+    avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(username)}`,
+    created_at: new Date().toISOString(),
+  };
+  if (passwordEnc) {
+    insertPayload.password_enc = passwordEnc;
+  }
+
+  const { data: created, error } = await db
+    .from('users')
+    .insert(insertPayload)
+    .select('*')
+    .single();
+
+  if (error || !created) {
+    fail(res, 500, error?.message || "Ro'yxatdan o'tishda xatolik yuz berdi");
+    return;
+  }
+
+  const user = toPublicUser(created as UserRow);
+  res.status(201).json({ token: issueToken(user), user });
+}));
+
+app.post('/api/auth/check-username', checkUsernameLimiter, asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body?.username);
+  if (!USERNAME_RE.test(username)) {
+    res.json({ available: false, error: "Username noto'g'ri formatda!" });
+    return;
+  }
+  if (OWNER_ENABLED && username === OWNER_USERNAME) {
+    res.json({ available: false, error: 'Ushbu username band!' });
+    return;
+  }
+  const { data } = await db
+    .from('users')
+    .select('id')
+    .ilike('username', ilikeEscape(username))
+    .maybeSingle();
+
+  res.json({
+    available: !data,
+    ...(data ? { error: 'Ushbu username band!' } : {}),
+  });
+}));
+
+app.post('/api/auth/forgot-password', registerLimiter, asyncRoute(async (req, res) => {
+  const username = normalizeUsername(req.body?.username);
+  const note = str(req.body?.note, 200);
+  if (!USERNAME_RE.test(username) || !note) {
+    fail(res, 400, "Login va aloqa ma'lumotini kiriting!");
+    return;
+  }
+
+  const { data: userRow } = await db
+    .from('users')
+    .select('id, username')
+    .ilike('username', ilikeEscape(username))
+    .maybeSingle();
+
+  if (userRow) {
+    await db.from('password_requests').insert({
+      id: `PR-${crypto.randomUUID()}`,
+      user_id: userRow.id,
+      username: userRow.username,
+      note,
+      resolved: false,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  res.json({
+    ok: true,
+    message: "So'rovingiz adminga yuborildi. Tez orada siz bilan bog'lanamiz.",
+  });
+}));
+
+// ---------- Admin / Creator Password & Lookup ----------
+app.get('/api/admin/password-requests', requireCreator, asyncRoute(async (_req, res) => {
+  const { data, error } = await db
+    .from('password_requests')
+    .select('id, user_id, username, note, created_at')
+    .eq('resolved', false)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json(data ?? []);
+}));
+
+app.get('/api/admin/lookup', requireCreator, asyncRoute(async (req, res) => {
+  const id = str(req.query.id, 30);
+  if (!id) {
+    fail(res, 400, 'ID kiriting');
+    return;
+  }
+  const { data } = await db
+    .from('users')
+    .select('*')
+    .ilike('id', ilikeEscape(id))
+    .maybeSingle();
+
+  if (!data) {
+    fail(res, 404, 'Foydalanuvchi topilmadi');
+    return;
+  }
+  res.json(toPublicUser(data as UserRow));
+}));
+
+app.post('/api/admin/members/reset-password', requireCreator, asyncRoute(async (req, res) => {
+  const id = str(req.body?.id, 30);
+  if (!id || id === OWNER_ID) {
+    fail(res, 400, "Foydalanuvchi ID noto'g'ri");
+    return;
+  }
+
+  const { data: userRow } = await db.from('users').select('id, username').eq('id', id).maybeSingle();
+  if (!userRow) {
+    fail(res, 404, 'Foydalanuvchi topilmadi');
+    return;
+  }
+
+  const newPassword = `vcg_${crypto.randomBytes(5).toString('hex')}`;
+  const updatePayload: Record<string, unknown> = {
+    password_hash: hashPassword(newPassword),
+  };
+  const enc = encryptSecret(newPassword);
+  if (enc) updatePayload.password_enc = enc;
+
+  const { error } = await db.from('users').update(updatePayload).eq('id', id);
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json({ password: newPassword, username: userRow.username });
+}));
+
+app.post('/api/admin/password-requests/:id/resolve', requireCreator, asyncRoute(async (req, res) => {
+  const reqId = str(req.params.id, 80);
+  const { data: reqRow } = await db
+    .from('password_requests')
+    .select('*')
+    .eq('id', reqId)
+    .maybeSingle();
+
+  if (!reqRow) {
+    fail(res, 404, "So'rov topilmadi");
+    return;
+  }
+
+  const newPassword = `vcg_${crypto.randomBytes(5).toString('hex')}`;
+  const updatePayload: Record<string, unknown> = {
+    password_hash: hashPassword(newPassword),
+  };
+  const enc = encryptSecret(newPassword);
+  if (enc) updatePayload.password_enc = enc;
+
+  const { error: userErr } = await db.from('users').update(updatePayload).eq('id', reqRow.user_id);
+  if (userErr) {
+    fail(res, 500, userErr.message);
+    return;
+  }
+
+  await db.from('password_requests').update({ resolved: true }).eq('id', reqId);
+  res.json({ password: newPassword, username: reqRow.username });
+}));
+
+// ---------- Database Sync & CRUD ----------
+app.get('/api/db/health', requireAuth, asyncRoute(async (_req, res) => {
+  const { error } = await db.from('users').select('id').limit(1);
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json({
+    connected: true,
+    message: 'Supabase PostgreSQL bazasiga xavfsiz ulandi!',
+    lastChecked: new Date().toLocaleTimeString('uz-UZ'),
+  });
+}));
+
+app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const isCreator = session.role === 'creator';
+  const isUser = session.role === 'user';
+
+  const result: Record<string, unknown[]> = {};
+
+  await Promise.all(
+    Object.entries(TABLES).map(async ([table, cfg]) => {
+      if ((table === 'tasks' || table === 'activities') && isUser) {
+        result[table] = [];
+        return;
+      }
+      if (table === 'notifications' && !isCreator) {
+        result[table] = [];
+        return;
+      }
+
+      let q = db.from(table).select(cfg.columns.join(', '));
+
+      if (table === 'orders' && isUser) {
+        q = q.eq('user_id', session.sub);
+      } else if (table === 'notes') {
+        if (isUser) {
+          q = q.eq('author_id', session.sub);
+        } else if (!isCreator) {
+          q = q.or(`is_private.eq.false,author_id.eq.${session.sub}`);
+        }
+      } else if (table === 'chats') {
+        const safeSub = ilikeEscape(session.sub);
+        q = q.or(`chat_id.eq.general,sender_id.eq.${session.sub},chat_id.ilike.%${safeSub}%`);
+      } else if (table === 'reminders') {
+        q = q.eq('user_id', session.sub);
+      }
+
+      q = q.order(cfg.order, { ascending: Boolean(cfg.asc) });
+      if (cfg.limit) q = q.limit(cfg.limit);
+
+      const { data, error } = await q;
+      if (error) {
+        console.warn(`[sync:${table}]`, error.message);
+        result[table] = [];
+      } else {
+        result[table] = data ?? [];
+      }
+    }),
+  );
+
+  res.json(result);
+}));
+
+app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const table = req.params.table;
+  const cfg = TABLES[table];
+  if (!cfg) {
+    fail(res, 404, 'Jadval topilmadi');
+    return;
+  }
+
+  const rawRow = req.body?.row;
+  if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) {
+    fail(res, 400, "Noto'g'ri ma'lumot formati");
+    return;
+  }
+
+  const row = pickColumns(rawRow as Record<string, unknown>, cfg.columns);
+  const rowId = str(row.id, 120);
+  if (!rowId) {
+    fail(res, 400, 'ID majburiy');
+    return;
+  }
+  row.id = rowId;
+
+  const isCreator = session.role === 'creator';
+  const isUser = session.role === 'user';
+
+  if (table === 'users') {
+    if (!isCreator) {
+      if (rowId !== session.sub) {
+        fail(res, 403, 'Faqat shaxsiy profilni tahrirlash mumkin');
+        return;
+      }
+      delete row.role;
+    } else if (rowId === OWNER_ID) {
+      row.role = 'creator';
+    } else if (row.role === 'creator') {
+      fail(res, 403, 'Ikkinchi creator tayinlab bo\'lmaydi');
+      return;
+    }
+
+    if (typeof row.username === 'string') {
+      const cleanU = normalizeUsername(row.username);
+      if (!USERNAME_RE.test(cleanU)) {
+        fail(res, 400, "Username formati noto'g'ri");
+        return;
+      }
+      row.username = cleanU;
+    }
+  } else if (table === 'site_settings') {
+    if (!isCreator) {
+      // Allow non-creator users only to mark broadcasts as read without overwriting site settings
+      const incomingData = (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, unknown>;
+      const incomingBroadcasts = Array.isArray(incomingData.broadcasts) ? incomingData.broadcasts : [];
+      const { data: currentRow } = await db
+        .from('site_settings')
+        .select('data')
+        .eq('id', 'default')
+        .maybeSingle();
+
+      if (!currentRow?.data || typeof currentRow.data !== 'object') {
+        fail(res, 403, 'Faqat creator uchun');
+        return;
+      }
+
+      const currentData = currentRow.data as Record<string, unknown>;
+      const currentBroadcasts = Array.isArray(currentData.broadcasts) ? currentData.broadcasts : [];
+      const readIds = new Set(
+        incomingBroadcasts
+          .filter((b: any) => b && Array.isArray(b.readByUserIds) && b.readByUserIds.includes(session.sub))
+          .map((b: any) => String(b.id)),
+      );
+
+      const mergedBroadcasts = currentBroadcasts.map((bc: any) => {
+        if (!bc || !readIds.has(String(bc.id))) return bc;
+        const existingReads: string[] = Array.isArray(bc.readByUserIds) ? bc.readByUserIds : [];
+        if (existingReads.includes(session.sub)) return bc;
+        return { ...bc, readByUserIds: [...existingReads, session.sub] };
+      });
+
+      row.id = 'default';
+      row.data = { ...currentData, broadcasts: mergedBroadcasts };
+    }
+  } else if (table === 'projects' || table === 'tasks') {
+    if (isUser) {
+      fail(res, 403, "Bu bo'lim faqat jamoa a'zolari uchun");
+      return;
+    }
+  } else if (table === 'orders') {
+    if (isUser) {
+      const { data: existingOrder } = await db
+        .from('orders')
+        .select('user_id')
+        .eq('id', rowId)
+        .maybeSingle();
+      if (existingOrder && existingOrder.user_id !== session.sub) {
+        fail(res, 403, 'Ruxsat berilmagan');
+        return;
+      }
+      row.user_id = session.sub;
+    }
+  } else if (cfg.strict && cfg.owner) {
+    const { data: existing } = await db
+      .from(table)
+      .select(cfg.owner)
+      .eq('id', rowId)
+      .maybeSingle();
+
+    if (existing && (existing as unknown as Record<string, unknown>)[cfg.owner] !== session.sub && !isCreator) {
+      fail(res, 403, 'Ruxsat berilmagan');
+      return;
+    }
+    if (!isCreator || !existing) {
+      row[cfg.owner] = session.sub;
+    }
+  } else if (table === 'activities') {
+    row.user_id = session.sub;
+  } else if (table === 'notifications') {
+    if (!isCreator) {
+      const { data: existingNotif } = await db
+        .from('notifications')
+        .select('id')
+        .eq('id', rowId)
+        .maybeSingle();
+      if (existingNotif) {
+        fail(res, 403, 'Faqat creator bildirishnomalarni tahrirlay oladi');
+        return;
+      }
+      row.read = false;
+    }
+  }
+
+  const { error } = await db.from(table).upsert(row);
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json({ ok: true });
+}));
+
+app.delete('/api/db/:table/:id', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const table = req.params.table;
+  const id = str(req.params.id, 120);
+  const cfg = TABLES[table];
+
+  if (!cfg || !id) {
+    fail(res, 404, 'Topilmadi');
+    return;
+  }
+
+  const isCreator = session.role === 'creator';
+  if (cfg.creatorOnlyDelete && !isCreator) {
+    fail(res, 403, 'Faqat creator o\'chira oladi');
+    return;
+  }
+  if (table === 'users' && id === OWNER_ID) {
+    fail(res, 403, 'Asosiy creator hisobini o\'chirib bo\'lmaydi');
+    return;
+  }
+
+  if (cfg.strict && cfg.owner) {
+    const { data: existing } = await db
+      .from(table)
+      .select(cfg.owner)
+      .eq('id', id)
+      .maybeSingle();
+
+    if (existing && (existing as unknown as Record<string, unknown>)[cfg.owner] !== session.sub && !isCreator) {
+      fail(res, 403, 'Ruxsat berilmagan');
+      return;
+    }
+  } else if (session.role === 'user') {
+    fail(res, 403, 'Ruxsat berilmagan');
+    return;
+  }
+
+  const { error } = await db.from(table).delete().eq('id', id);
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json({ ok: true });
+}));
+
+app.post('/api/db/notifications/clear', requireCreator, asyncRoute(async (_req, res) => {
+  const { error } = await db.from('notifications').delete().neq('id', '');
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json({ ok: true });
+}));
+
+// ---------- Chats compatibility endpoints ----------
+app.get('/api/chats', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const safeSub = ilikeEscape(session.sub);
+  const { data } = await db
+    .from('chats')
+    .select(TABLES.chats.columns.join(', '))
+    .or(`chat_id.eq.general,sender_id.eq.${session.sub},chat_id.ilike.%${safeSub}%`)
+    .order('created_at', { ascending: true });
+
+  res.json(
+    (data ?? []).map((r: any) => ({
+      id: r.id,
+      senderId: r.sender_id,
+      senderName: r.sender_name,
+      senderRole: r.sender_role,
+      senderAvatar: r.sender_avatar,
+      text: r.text,
+      timestamp: r.timestamp_label || new Date(r.created_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+      chatId: r.chat_id || 'general',
+      attachmentUrl: r.attachment_url,
+      isEdited: Boolean(r.is_edited),
+      audioUrl: r.audio_url,
+      audioDuration: r.audio_duration,
+    })),
+  );
+}));
+
+app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const m = req.body;
+  if (!m || !m.id) {
+    fail(res, 400, 'Xabar formati noto\'g\'ri');
+    return;
+  }
+  const { error } = await db.from('chats').upsert({
+    id: str(m.id, 80),
+    sender_id: session.sub,
+    sender_name: str(m.senderName, 150),
+    sender_role: session.role,
+    sender_avatar: str(m.senderAvatar, 2000),
+    text: str(m.text, 4000),
+    timestamp_label: str(m.timestamp, 50),
+    chat_id: str(m.chatId || 'general', 120),
+    attachment_url: typeof m.attachmentUrl === 'string' ? m.attachmentUrl : null,
+    is_edited: Boolean(m.isEdited),
+    audio_url: typeof m.audioUrl === 'string' ? m.audioUrl : null,
+    audio_duration: Number(m.audioDuration) || 0,
+    created_at: new Date().toISOString(),
+  });
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json({ ok: true });
+}));
+
+// ---------- AI Multi-Engine Search ----------
+async function queryGemini(query: string, apiKey?: string): Promise<string> {
+  const key = apiKey || env('GEMINI_API_KEY');
+  if (!key) return "⚠️ **Gemini API Key topilmadi.** `.env` fayliga `GEMINI_API_KEY` kiriting.";
+  try {
+    const ai = new GoogleGenAI({ apiKey: key });
+    const model = env('GEMINI_MODEL') || 'gemini-2.5-flash';
+    const response = await ai.models.generateContent({
+      model,
+      contents: `Siz VisionCore Group AI tadqiqot yordamchisiz. Quyidagi so'rov bo'yicha batafsil o'zbekcha tahlil tayyorlang:\n${query}`,
+    });
+    return response.text || 'Gemini javob qaytarmadi.';
+  } catch (e: any) {
+    return `Gemini API xatoligi: ${e?.message || String(e)}`;
+  }
+}
+
+async function queryTavily(query: string, apiKey?: string): Promise<string> {
+  const key = apiKey || env('TAVILY_API_KEY');
+  if (!key) return "⚠️ **Tavily API Key topilmadi.**";
+  try {
+    const resp = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: key, query, search_depth: 'advanced', include_answer: true }),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    });
+    const resData: any = await resp.json();
+    const out: string[] = [];
+    if (resData.answer) out.push(`**Tavily Javobi:**\n${resData.answer}\n`);
+    if (Array.isArray(resData.results) && resData.results.length > 0) {
+      out.push('**Manbalar:**');
+      resData.results.slice(0, 5).forEach((r: any, idx: number) => {
+        out.push(`${idx + 1}. [${r.title || 'Manba'}](${r.url})\n   ${r.content || ''}`);
+      });
+    }
+    return out.length > 0 ? out.join('\n\n') : "Tavily natijalari topilmadi.";
+  } catch (e: any) {
+    return `Tavily API xatoligi: ${e?.message || String(e)}`;
+  }
+}
+
+async function querySerpApi(query: string, apiKey?: string): Promise<string> {
+  const key = apiKey || env('SERPAPI_API_KEY');
+  if (!key) return "⚠️ **SerpAPI Key topilmadi.**";
+  try {
+    const resp = await fetch(
+      `https://serpapi.com/search.json?q=${encodeURIComponent(query)}&api_key=${encodeURIComponent(key)}`,
+      { signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) },
+    );
+    const resData: any = await resp.json();
+    const organic = resData.organic_results || [];
+    if (!organic.length) return 'SerpAPI natijalari topilmadi.';
+    const out = ['**SerpAPI Natijalari:**\n'];
+    organic.slice(0, 5).forEach((item: any, idx: number) => {
+      out.push(`${idx + 1}. **[${item.title || 'Natija'}](${item.link})**\n   ${item.snippet || ''}`);
+    });
+    return out.join('\n\n');
+  } catch (e: any) {
+    return `SerpAPI xatoligi: ${e?.message || String(e)}`;
+  }
+}
+
+async function queryExa(query: string, apiKey?: string): Promise<string> {
+  const key = apiKey || env('EXA_API_KEY');
+  if (!key) return "⚠️ **Exa API Key topilmadi.**";
+  try {
+    const resp = await fetch('https://api.exa.ai/search', {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, numResults: 5, useAutoprompt: true }),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    });
+    const resData: any = await resp.json();
+    const results = resData.results || [];
+    if (!results.length) return 'Exa AI natijalari topilmadi.';
+    const out = ['**Exa Neural Search:**\n'];
+    results.forEach((r: any, idx: number) => {
+      out.push(`${idx + 1}. **[${r.title || 'Link'}](${r.url})**`);
+    });
+    return out.join('\n\n');
+  } catch (e: any) {
+    return `Exa API xatoligi: ${e?.message || String(e)}`;
+  }
+}
+
+async function queryFirecrawl(query: string, apiKey?: string): Promise<string> {
+  const key = apiKey || env('FIRECRAWL_API_KEY');
+  if (!key) return "⚠️ **Firecrawl API Key topilmadi.**";
+  try {
+    const resp = await fetch('https://api.firecrawl.dev/v1/search', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit: 5 }),
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+    });
+    const resData: any = await resp.json();
+    const items = resData.data || [];
+    if (!items.length) return 'Firecrawl natijalari topilmadi.';
+    const out = ['**Firecrawl Natijalari:**\n'];
+    items.forEach((item: any, idx: number) => {
+      const title = item.title || item.metadata?.title || 'Veb-sahifa';
+      const urlLink = item.url || item.metadata?.sourceURL || '#';
+      const desc = item.description || (item.markdown || '').slice(0, 200);
+      out.push(`${idx + 1}. **[${title}](${urlLink})**\n   ${desc}`);
+    });
+    return out.join('\n\n');
+  } catch (e: any) {
+    return `Firecrawl API xatoligi: ${e?.message || String(e)}`;
+  }
+}
+
+app.post('/api/ai-search', searchLimiter, requireAuth, asyncRoute(async (req, res) => {
+  const query = str(req.body?.query, 500);
+  const engine = str(req.body?.engine || 'all', 30).toLowerCase();
+  if (!query) {
+    fail(res, 400, 'So\'rov matnini kiriting');
+    return;
+  }
+
+  let text = '';
+  if (engine === 'tavily') text = await queryTavily(query);
+  else if (engine === 'serpapi') text = await querySerpApi(query);
+  else if (engine === 'gemini') text = await queryGemini(query);
+  else if (engine === 'exa') text = await queryExa(query);
+  else if (engine === 'firecrawl') text = await queryFirecrawl(query);
+  else {
+    const parts: string[] = [];
+    if (env('TAVILY_API_KEY')) parts.push(`### 🌐 Tavily\n${await queryTavily(query)}`);
+    if (env('SERPAPI_API_KEY')) parts.push(`### 🔍 SerpAPI\n${await querySerpApi(query)}`);
+    if (env('GEMINI_API_KEY')) parts.push(`### ✨ Google Gemini\n${await queryGemini(query)}`);
+    if (env('EXA_API_KEY')) parts.push(`### ⚡ Exa AI\n${await queryExa(query)}`);
+    if (env('FIRECRAWL_API_KEY')) parts.push(`### 🔥 Firecrawl\n${await queryFirecrawl(query)}`);
+    text = parts.length > 0
+      ? parts.join('\n\n---\n\n')
+      : "Qidiruv API kalitlari (.env) hali o'rnatilmagan.";
+  }
+
+  res.json({ text, engine });
+}));
+
+// ---------- Error Handler ----------
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[Server Error]', err);
+  if (!res.headersSent) {
+    fail(res, 500, 'Ichki server xatoligi yuz berdi');
+  }
+});
+
+// ---------- Dev (Vite) / Prod Standalone / Vercel Export ----------
+async function startStandaloneServer() {
+  if (!IS_PROD) {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[VisionCore Group Server] Running at http://localhost:${PORT}`);
+  });
+}
+
+if (!process.env.VERCEL) {
+  void startStandaloneServer();
+}
+
+export default app;

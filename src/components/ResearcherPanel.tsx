@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, Send, Paperclip, Sparkles, FileText, Globe, Bot } from 'lucide-react';
 import { User } from '../types';
+import { apiPost } from '../lib/api';
 
 interface ResearcherPanelProps {
   currentUser: User;
@@ -45,16 +46,10 @@ export const ResearcherPanel: React.FC<ResearcherPanelProps> = ({
     const currentEngine = selectedEngine;
 
     try {
-      const res = await fetch('/api/ai-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: searchQuery || (uploadedFileName ? `Fayl tahlili: ${uploadedFileName}` : 'Qidiruv'),
-          engine: currentEngine
-        })
+      const data = await apiPost<{ text?: string }>('/api/ai-search', {
+        query: searchQuery || (uploadedFileName ? `Fayl tahlili: ${uploadedFileName}` : 'Qidiruv'),
+        engine: currentEngine
       });
-
-      const data = await res.json();
       const responseText = data.text || "Qidiruv natijasi olindi.";
 
       const newItem: SearchResultItem = {
