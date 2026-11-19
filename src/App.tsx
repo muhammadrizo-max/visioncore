@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   User, Project, ChatMessage, Task, NoteItem, VersionPlan,
   TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, SiteSettings, Order, MemberActivity, BroadcastMessage
@@ -7,7 +7,7 @@ import {
   INITIAL_USERS, INITIAL_SITE_SETTINGS
 } from './mockData';
 import { fetchAllFromSupabase, sbSync } from './lib/supabase';
-import { getToken, clearToken } from './lib/api';
+import { api, getToken, clearToken } from './lib/api';
 
 import { LandingPage } from './components/LandingPage';
 import { Header } from './components/Header';
@@ -22,13 +22,38 @@ import { ResearcherPanel } from './components/ResearcherPanel';
 import { EngineerPanel } from './components/EngineerPanel';
 import { DesignerPanel } from './components/DesignerPanel';
 import { OrderView } from './components/OrderView';
-import { OrdersManagementView } from './components/OrdersManagementView';
+import { OrdersManagementView, getOrderAssignedIds } from './components/OrdersManagementView';
 import { MembersView } from './components/MembersView';
 import { BroadcastView } from './components/BroadcastView';
 import { ProfileView } from './components/ProfileView';
-import { SettingsView } from './components/SettingsView';
+import { SettingsView, UserWorkspacePrefs } from './components/SettingsView';
 import { StatisticsView } from './components/StatisticsView';
 import { MatrixRain } from './components/MatrixRain';
+
+function extractDmUsersFromChatId(chatId: string): [string, string] | null {
+  if (!chatId) return null;
+  if (chatId.startsWith('direct::')) {
+    const parts = chatId.slice(8).split('::').filter(Boolean);
+    if (parts.length === 2) return [parts[0], parts[1]];
+  }
+  if (chatId.startsWith('direct_')) {
+    const body = chatId.slice(7);
+    const matches = body.match(/vcg[-_]\d+/gi);
+    if (matches && matches.length === 2) return [matches[0], matches[1]];
+    const parts = body.split('_').filter(Boolean);
+    if (parts.length === 2) return [parts[0], parts[1]];
+  }
+  return null;
+}
+
+function sortChatsChronologically(list: ChatMessage[]): ChatMessage[] {
+  return [...list].sort((a, b) => {
+    const tsA = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const tsB = b.createdAt ? Date.parse(b.createdAt) : 0;
+    if (tsA && tsB && tsA !== tsB) return tsA - tsB;
+    return a.id.localeCompare(b.id);
+  });
+}
 
 export default function App() {
   // Clean legacy dummy data once so real production counts start from 0
@@ -160,6 +185,138 @@ export default function App() {
   const [activeMenu, setActiveMenu] = useState<string>('Bosh sahifa');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
 
+  // Per-user Workspace Preferences (Background + Group Chat notification toggle)
+  const getDefaultUserPrefs = useCallback((u: User | null): UserWorkspacePrefs => {
+    if (u) {
+      try {
+        const raw = localStorage.getItem(`visioncore_user_prefs_${u.id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<UserWorkspacePrefs>;
+          return {
+            backgroundType: parsed.backgroundType || (u.role === 'creator' ? siteSettings.creatorBackgroundType || 'default' : 'default'),
+            backgroundImage: parsed.backgroundImage ?? (u.role === 'creator' ? siteSettings.creatorBackgroundImage || '' : ''),
+            groupChatNotifications: typeof parsed.groupChatNotifications === 'boolean' ? parsed.groupChatNotifications : true,
+          };
+        }
+      } catch {
+        // ignore
+      }
+      if (u.role === 'creator') {
+        return {
+          backgroundType: siteSettings.creatorBackgroundType || 'default',
+          backgroundImage: siteSettings.creatorBackgroundImage || '',
+          groupChatNotifications: true,
+        };
+      }
+    }
+    return { backgroundType: 'default', backgroundImage: '', groupChatNotifications: true };
+  }, [siteSettings.creatorBackgroundType, siteSettings.creatorBackgroundImage]);
+
+  const [userPrefs, setUserPrefs] = useState<UserWorkspacePrefs>(() => getDefaultUserPrefs(currentUser));
+  const [localChatNotifs, setLocalChatNotifs] = useState<NotificationItem[]>(() => {
+    if (!currentUser) return [];
+    try {
+      const raw = localStorage.getItem(`visioncore_chat_notifs_${currentUser.id}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const knownChatIdsRef = useRef<Set<string> | null>(null);
+  const currentUserRef = useRef<User | null>(currentUser);
+  currentUserRef.current = currentUser;
+  const userPrefsRef = useRef<UserWorkspacePrefs>(userPrefs);
+  userPrefsRef.current = userPrefs;
+
+  useEffect(() => {
+    setUserPrefs(getDefaultUserPrefs(currentUser));
+    if (currentUser) {
+      try {
+        const raw = localStorage.getItem(`visioncore_chat_notifs_${currentUser.id}`);
+        setLocalChatNotifs(raw ? JSON.parse(raw) : []);
+      } catch {
+        setLocalChatNotifs([]);
+      }
+    } else {
+      setLocalChatNotifs([]);
+      knownChatIdsRef.current = null;
+    }
+  }, [currentUser?.id]);
+
+  const handleUpdateUserPrefs = (nextPrefs: UserWorkspacePrefs) => {
+    setUserPrefs(nextPrefs);
+    if (currentUser) {
+      localStorage.setItem(`visioncore_user_prefs_${currentUser.id}`, JSON.stringify(nextPrefs));
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(`visioncore_chat_notifs_${currentUser.id}`, JSON.stringify(localChatNotifs.slice(0, 60)));
+    }
+  }, [localChatNotifs, currentUser]);
+
+  // Process newly arrived chat message for DM (always) or Group (if enabled) notification
+  const processChatNotifs = useCallback((incomingList: ChatMessage[]) => {
+    const me = currentUserRef.current;
+    if (!me) return;
+
+    if (knownChatIdsRef.current === null) {
+      knownChatIdsRef.current = new Set(incomingList.map((m) => m.id));
+      return;
+    }
+
+    const newNotifs: NotificationItem[] = [];
+    for (const msg of incomingList) {
+      if (knownChatIdsRef.current.has(msg.id)) continue;
+      knownChatIdsRef.current.add(msg.id);
+
+      if (msg.senderId === me.id) continue;
+
+      const dmParticipants = extractDmUsersFromChatId(msg.chatId || '');
+      const previewText = msg.audioUrl
+        ? 'Ovozli xabar'
+        : (msg.text || '').trim().slice(0, 65) + ((msg.text || '').length > 65 ? '...' : '');
+
+      if (dmParticipants && dmParticipants.includes(me.id)) {
+        // Direct Message: ALWAYS notify (cannot be muted)
+        newNotifs.push({
+          id: `CHATN-${msg.id}`,
+          message: `Shaxsiy xabar (${msg.senderName}): ${previewText}`,
+          read: false,
+          time: msg.timestamp || new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+          targetScope: 'specific',
+          targetUserIds: [me.id],
+          category: 'chat_dm',
+          actionMenu: 'Chat',
+        });
+      } else if (!msg.chatId || msg.chatId === 'general') {
+        // Group Chat: ONLY notify if groupChatNotifications is enabled
+        if (userPrefsRef.current.groupChatNotifications) {
+          newNotifs.push({
+            id: `CHATN-${msg.id}`,
+            message: `Umumiy chat (${msg.senderName}): ${previewText}`,
+            read: false,
+            time: msg.timestamp || new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+            targetScope: 'specific',
+            targetUserIds: [me.id],
+            category: 'chat_group',
+            actionMenu: 'Chat',
+          });
+        }
+      }
+    }
+
+    if (newNotifs.length > 0) {
+      setLocalChatNotifs((prev) => {
+        const existingIds = new Set(prev.map((n) => n.id));
+        const unique = newNotifs.filter((n) => !existingIds.has(n.id));
+        return unique.length > 0 ? [...unique, ...prev].slice(0, 60) : prev;
+      });
+    }
+  }, []);
+
   // LocalStorage Persistence
   useEffect(() => { localStorage.setItem('visioncore_users', JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem('visioncore_orders', JSON.stringify(orders)); }, [orders]);
@@ -206,12 +363,9 @@ export default function App() {
     if (data.tasks) setTasks(data.tasks);
     if (data.notes) setNotes(data.notes);
     if (data.chats) {
-      setChats([...data.chats].sort((a, b) => {
-        const tsA = a.createdAt ? Date.parse(a.createdAt) : 0;
-        const tsB = b.createdAt ? Date.parse(b.createdAt) : 0;
-        if (tsA && tsB && tsA !== tsB) return tsA - tsB;
-        return a.id.localeCompare(b.id);
-      }));
+      const sorted = sortChatsChronologically(data.chats);
+      processChatNotifs(sorted);
+      setChats(sorted);
     }
     if (data.reminders) setReminders(data.reminders);
     if (data.activities) setActivities(data.activities);
@@ -224,7 +378,7 @@ export default function App() {
     }
 
     return true;
-  }, []);
+  }, [processChatNotifs]);
 
   useEffect(() => {
     fetch('/api/config')
@@ -243,11 +397,31 @@ export default function App() {
     const timer = setInterval(() => {
       void syncWithSupabase();
     }, 10000);
-    return () => clearInterval(timer);
-  }, [currentUser, syncWithSupabase]);
+
+    // Lightweight background chat poll so DM / Group notifications arrive quickly on any page
+    const chatTimer = setInterval(async () => {
+      if (!getToken()) return;
+      try {
+        const freshChats = await api<ChatMessage[]>('/api/chats');
+        if (Array.isArray(freshChats)) {
+          const sorted = sortChatsChronologically(freshChats);
+          processChatNotifs(sorted);
+          setChats(sorted);
+        }
+      } catch {
+        // ignore
+      }
+    }, 3500);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(chatTimer);
+    };
+  }, [currentUser, syncWithSupabase, processChatNotifs]);
 
   const handleClearNotifications = () => {
     setNotifications([]);
+    setLocalChatNotifs([]);
     void sbSync.clearNotifications();
   };
 
@@ -267,22 +441,65 @@ export default function App() {
     void sbSync.insertActivity(newAct);
   };
 
-  // Push real notification helper
-  const pushNotification = (message: string) => {
+  // Push real notification helper with scope & recipient targeting
+  const pushNotification = (
+    message: string,
+    opts?: {
+      targetScope?: 'creator' | 'team' | 'specific';
+      targetUserIds?: string[];
+      category?: NotificationItem['category'];
+      actionMenu?: string;
+    }
+  ) => {
     const newNotif: NotificationItem = {
       id: `N-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       message,
       read: false,
-      time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+      targetScope: opts?.targetScope || 'creator',
+      targetUserIds: opts?.targetUserIds,
+      category: opts?.category || 'system',
+      actionMenu: opts?.actionMenu,
+      readByUserIds: [],
     };
     setNotifications(prev => [newNotif, ...prev]);
     void sbSync.upsertNotification(newNotif);
   };
 
+  const handleMarkNotificationRead = (notifId: string) => {
+    if (!currentUser) return;
+    setLocalChatNotifs(prev => prev.map(n => (n.id === notifId ? { ...n, read: true } : n)));
+    setNotifications(prev =>
+      prev.map(n => {
+        if (n.id !== notifId) return n;
+        const rb = Array.isArray(n.readByUserIds) ? [...n.readByUserIds] : [];
+        if (!rb.includes(currentUser.id)) rb.push(currentUser.id);
+        const updated: NotificationItem = {
+          ...n,
+          read: currentUser.role === 'creator' ? true : n.read,
+          readByUserIds: rb,
+        };
+        void sbSync.upsertNotification(updated);
+        return updated;
+      })
+    );
+  };
+
   const handleMarkAllNotificationsRead = () => {
+    if (!currentUser) return;
+    setLocalChatNotifs(prev => prev.map(n => ({ ...n, read: true })));
     setNotifications(prev => {
-      const updated = prev.map(n => ({ ...n, read: true }));
-      updated.forEach(n => { void sbSync.upsertNotification(n); });
+      const updated = prev.map(n => {
+        const rb = Array.isArray(n.readByUserIds) ? [...n.readByUserIds] : [];
+        if (!rb.includes(currentUser.id)) rb.push(currentUser.id);
+        const next: NotificationItem = {
+          ...n,
+          read: currentUser.role === 'creator' ? true : n.read,
+          readByUserIds: rb,
+        };
+        void sbSync.upsertNotification(next);
+        return next;
+      });
       return updated;
     });
   };
@@ -330,14 +547,38 @@ export default function App() {
     setOrders(prev => [newOrder, ...prev]);
     void sbSync.upsertOrder(newOrder);
     logActivity(`Yangi loyiha buyurtmasi topshirdi: "${newOrder.projectName}"`);
-    pushNotification(`Yangi buyurtma keldi: "${newOrder.projectName}" (${newOrder.projectType})`);
+    pushNotification(
+      `Yangi buyurtma keldi: "${newOrder.projectName}" (${newOrder.clientName})`,
+      { targetScope: 'team', category: 'order', actionMenu: 'Mijoz Buyurtmalari' }
+    );
   };
 
   const handleUpdateOrder = (updatedOrder: Order) => {
+    const prevOrder = orders.find(o => o.id === updatedOrder.id);
+    const prevIds = prevOrder ? getOrderAssignedIds(prevOrder) : [];
+    const nextIds = getOrderAssignedIds(updatedOrder);
+    const newlyAssigned = nextIds.filter(id => !prevIds.includes(id) && id !== currentUser?.id);
+
     setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
     void sbSync.upsertOrder(updatedOrder);
-    logActivity(`"${updatedOrder.projectName}" buyurtmasi statusini yangiladi: ${updatedOrder.status}`);
-    pushNotification(`Buyurtma holati yangilandi: "${updatedOrder.projectName}" → ${updatedOrder.status}`);
+    logActivity(`"${updatedOrder.projectName}" buyurtmasini yangiladi (${updatedOrder.status})`);
+
+    if (newlyAssigned.length > 0) {
+      pushNotification(
+        `Sizga buyurtma biriktirildi: "${updatedOrder.projectName}" (${updatedOrder.id})`,
+        {
+          targetScope: 'specific',
+          targetUserIds: newlyAssigned,
+          category: 'order',
+          actionMenu: 'Mijoz Buyurtmalari',
+        }
+      );
+    } else if (!prevOrder || prevOrder.status !== updatedOrder.status) {
+      pushNotification(
+        `Buyurtma holati yangilandi: "${updatedOrder.projectName}" → ${updatedOrder.status}`,
+        { targetScope: 'creator', category: 'order', actionMenu: 'Mijoz Buyurtmalari' }
+      );
+    }
   };
 
   // Members Handlers (Enforce single Creator rule)
@@ -368,9 +609,10 @@ export default function App() {
 
   // Chat Handlers
   const handleSendMessage = (msg: ChatMessage) => {
+    processChatNotifs([msg]);
     setChats(prev => {
       if (prev.some(m => m.id === msg.id)) return prev;
-      return [...prev, msg];
+      return sortChatsChronologically([...prev, msg]);
     });
     if (currentUser && msg.senderId === currentUser.id) {
       void sbSync.upsertChat(msg);
@@ -416,11 +658,38 @@ export default function App() {
     setTasks(prev => [newTask, ...prev]);
     void sbSync.upsertTask(newTask);
     logActivity(`Yangi vazifa belgilandi: "${newTask.title}"`);
+    if (newTask.assignedToId && newTask.assignedToId !== currentUser?.id) {
+      pushNotification(
+        `Sizga yangi vazifa biriktirildi: "${newTask.title}"`,
+        {
+          targetScope: 'specific',
+          targetUserIds: [newTask.assignedToId],
+          category: 'task',
+          actionMenu: 'Vazifalar',
+        }
+      );
+    }
   };
 
   const handleUpdateTask = (updatedTask: Task) => {
+    const prevTask = tasks.find(t => t.id === updatedTask.id);
     setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
     void sbSync.upsertTask(updatedTask);
+    if (
+      updatedTask.assignedToId &&
+      updatedTask.assignedToId !== prevTask?.assignedToId &&
+      updatedTask.assignedToId !== currentUser?.id
+    ) {
+      pushNotification(
+        `Sizga vazifa biriktirildi: "${updatedTask.title}"`,
+        {
+          targetScope: 'specific',
+          targetUserIds: [updatedTask.assignedToId],
+          category: 'task',
+          actionMenu: 'Vazifalar',
+        }
+      );
+    }
   };
 
   const handleToggleTask = (taskId: string) => {
@@ -596,23 +865,25 @@ export default function App() {
   }
 
   const isCreator = currentUser.role === 'creator';
-  const bgMode = siteSettings.creatorBackgroundType || 'default';
-  const showCustomBg = isCreator && bgMode === 'custom_image' && Boolean(siteSettings.creatorBackgroundImage);
+  const bgMode = userPrefs.backgroundType || 'default';
+  const customBgImage = userPrefs.backgroundImage || (isCreator ? siteSettings.creatorBackgroundImage || '' : '');
+  const showCustomBg = bgMode === 'custom_image' && Boolean(customBgImage);
   const showMatrixRain = bgMode === 'matrix';
+  const combinedNotifications = [...localChatNotifs, ...notifications];
 
   return (
     <div
-      className={`h-screen max-h-screen overflow-hidden flex flex-col font-sans transition-colors relative ${
+      className={`h-dvh max-h-dvh overflow-hidden flex flex-col font-sans transition-colors relative pb-[env(safe-area-inset-bottom)] ${
         darkMode
           ? 'bg-slate-950 text-slate-100'
           : 'bg-gradient-to-br from-slate-100 via-sky-50 to-indigo-100 text-slate-900'
       }`}
     >
-      {/* Custom Uploaded Background Image Layer for Creator */}
+      {/* Custom Uploaded Background Image Layer */}
       {showCustomBg && (
         <div
           className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat pointer-events-none"
-          style={{ backgroundImage: `url(${siteSettings.creatorBackgroundImage})` }}
+          style={{ backgroundImage: `url(${customBgImage})` }}
         >
           <div className={`absolute inset-0 ${darkMode ? 'bg-slate-950/55' : 'bg-white/35'}`} />
         </div>
@@ -644,9 +915,10 @@ export default function App() {
         isSidebarOpen={isSidebarOpen}
         onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         onNavigateMenu={setActiveMenu}
-        notifications={notifications}
+        notifications={combinedNotifications}
         broadcasts={siteSettings.broadcasts || []}
         onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+        onMarkNotificationRead={handleMarkNotificationRead}
         onClearNotifications={handleClearNotifications}
         onMarkBroadcastRead={handleMarkBroadcastRead}
       />
@@ -805,6 +1077,8 @@ export default function App() {
               user={currentUser}
               darkMode={darkMode}
               onToggleDarkMode={() => setDarkMode(!darkMode)}
+              userPrefs={userPrefs}
+              onUpdateUserPrefs={handleUpdateUserPrefs}
               siteSettings={siteSettings}
               onUpdateSiteSettings={handleUpdateSiteSettings}
               allUsers={users}

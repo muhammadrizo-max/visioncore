@@ -246,7 +246,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-600 selection:text-white dark">
       
       {/* 1. NAVBAR */}
-      <header className="sticky top-0 z-40 w-full liquid-glass border-b border-white/10 px-4 sm:px-8 py-3.5 flex items-center justify-between">
+      <header className="sticky top-0 z-40 w-full liquid-glass border-b border-white/10 px-4 sm:px-8 pt-[max(0.875rem,env(safe-area-inset-top))] pb-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-[0_0_20px_rgba(37,99,235,0.5)]">
             <Shield className="w-5 h-5 stroke-[2.5]" />

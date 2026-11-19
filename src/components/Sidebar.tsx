@@ -112,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside 
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        className={`fixed md:sticky top-0 left-0 z-50 md:z-30 h-full flex-shrink-0 flex flex-col justify-between transition-all duration-300 ease-in-out liquid-glass border-r border-slate-200/60 dark:border-white/10 select-none ${
+        className={`fixed md:sticky top-0 left-0 z-50 md:z-30 h-full pt-[env(safe-area-inset-top)] md:pt-0 flex-shrink-0 flex flex-col justify-between transition-all duration-300 ease-in-out liquid-glass border-r border-slate-200/60 dark:border-white/10 select-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } ${
           isExpanded ? 'w-64' : 'w-[72px]'

@@ -636,10 +636,6 @@ app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
         result[table] = [];
         return;
       }
-      if (table === 'notifications' && !isCreator) {
-        result[table] = [];
-        return;
-      }
 
       let q = db.from(table).select(cfg.columns.join(', '));
 
@@ -665,6 +661,20 @@ app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
       if (error) {
         console.warn(`[sync:${table}]`, error.message);
         result[table] = [];
+      } else if (table === 'notifications' && !isCreator) {
+        result[table] = (data ?? []).filter((r: any) => {
+          const rawLabel = String(r.time_label || '');
+          if (!rawLabel.startsWith('META::')) return false;
+          try {
+            const meta = JSON.parse(rawLabel.slice(6));
+            const scope = meta.scope || 'creator';
+            if (scope === 'team' && !isUser) return true;
+            if (scope === 'specific' && Array.isArray(meta.to) && meta.to.includes(session.sub)) return true;
+            return false;
+          } catch {
+            return false;
+          }
+        });
       } else {
         result[table] = data ?? [];
       }
@@ -794,14 +804,31 @@ app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
     if (!isCreator) {
       const { data: existingNotif } = await db
         .from('notifications')
-        .select('id')
+        .select('id, message, read, time_label, created_at')
         .eq('id', rowId)
         .maybeSingle();
       if (existingNotif) {
-        fail(res, 403, 'Faqat creator bildirishnomalarni tahrirlay oladi');
-        return;
+        // Allow recipients to append their userId into readByUserIds inside time_label metadata
+        const curLabel = String(existingNotif.time_label || '');
+        if (!curLabel.startsWith('META::')) {
+          fail(res, 403, 'Faqat creator bildirishnomalarni tahrirlay oladi');
+          return;
+        }
+        try {
+          const curMeta = JSON.parse(curLabel.slice(6));
+          const rb: string[] = Array.isArray(curMeta.rb) ? curMeta.rb : [];
+          if (!rb.includes(session.sub)) rb.push(session.sub);
+          row.message = existingNotif.message;
+          row.read = existingNotif.read;
+          row.time_label = `META::${JSON.stringify({ ...curMeta, rb })}`;
+          row.created_at = existingNotif.created_at;
+        } catch {
+          fail(res, 403, 'Faqat creator bildirishnomalarni tahrirlay oladi');
+          return;
+        }
+      } else {
+        row.read = false;
       }
-      row.read = false;
     }
   }
 

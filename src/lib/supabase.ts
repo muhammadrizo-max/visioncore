@@ -68,25 +68,42 @@ export async function fetchAllFromSupabase(): Promise<SupabaseSyncPayload | null
     const raw = await api<Record<string, any[]>>('/api/sync');
     return {
       users: (raw.users ?? []).map(mapUser),
-      orders: (raw.orders ?? []).map((r: any) => ({
-        id: r.id,
-        userId: r.user_id,
-        clientName: r.client_name,
-        clientPhone: r.client_phone,
-        clientTelegram: r.client_telegram,
-        projectType: r.project_type,
-        projectName: r.project_name,
-        description: r.description,
-        budget: r.budget,
-        deadline: r.deadline,
-        status: r.status,
-        createdAt: r.created_at,
-        adminNotes: r.admin_notes,
-        acceptedById: r.accepted_by_id,
-        acceptedByName: r.accepted_by_name,
-        assignedMemberId: r.assigned_member_id,
-        assignedMemberName: r.assigned_member_name,
-      })),
+      orders: (raw.orders ?? []).map((r: any) => {
+        const rawIdStr = String(r.assigned_member_id || '');
+        const byCreator = rawIdStr.startsWith('CREATOR::');
+        const cleanedIdStr = byCreator ? rawIdStr.slice(9) : rawIdStr;
+        const ids = cleanedIdStr
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+        const names = String(r.assigned_member_name || '')
+          .split('|')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+
+        return {
+          id: r.id,
+          userId: r.user_id,
+          clientName: r.client_name,
+          clientPhone: r.client_phone,
+          clientTelegram: r.client_telegram,
+          projectType: r.project_type,
+          projectName: r.project_name,
+          description: r.description,
+          budget: r.budget,
+          deadline: r.deadline,
+          status: r.status,
+          createdAt: r.created_at,
+          adminNotes: r.admin_notes,
+          acceptedById: r.accepted_by_id,
+          acceptedByName: r.accepted_by_name,
+          assignedMemberId: ids[0] || undefined,
+          assignedMemberName: names[0] || undefined,
+          assignedMemberIds: ids,
+          assignedMemberNames: names,
+          assignedByCreator: byCreator,
+        };
+      }),
       projects: (raw.projects ?? []).map((r: any) => ({
         id: r.id,
         name: r.name,
@@ -146,12 +163,35 @@ export async function fetchAllFromSupabase(): Promise<SupabaseSyncPayload | null
         target: r.target,
         timestamp: r.timestamp,
       })),
-      notifications: (raw.notifications ?? []).map((r: any) => ({
-        id: r.id,
-        message: r.message,
-        read: Boolean(r.read),
-        time: r.time_label || LOCAL_TIME(r.created_at),
-      })),
+      notifications: (raw.notifications ?? []).map((r: any) => {
+        const rawLabel = String(r.time_label || '');
+        if (rawLabel.startsWith('META::')) {
+          try {
+            const meta = JSON.parse(rawLabel.slice(6));
+            return {
+              id: r.id,
+              message: r.message,
+              read: Boolean(r.read),
+              time: meta.t || LOCAL_TIME(r.created_at),
+              targetScope: meta.scope || 'creator',
+              targetUserIds: Array.isArray(meta.to) ? meta.to : undefined,
+              category: meta.cat || 'system',
+              actionMenu: meta.menu || undefined,
+              readByUserIds: Array.isArray(meta.rb) ? meta.rb : undefined,
+            };
+          } catch {
+            // fallback
+          }
+        }
+        return {
+          id: r.id,
+          message: r.message,
+          read: Boolean(r.read),
+          time: rawLabel || LOCAL_TIME(r.created_at),
+          targetScope: 'creator' as const,
+          category: 'system' as const,
+        };
+      }),
       siteSettings: raw.site_settings?.[0]?.data,
     };
   } catch (err) {
@@ -214,8 +254,23 @@ export const sbSync = {
     }
   },
 
-  upsertOrder: (o: Order) =>
-    upsert('orders', {
+  upsertOrder: (o: Order) => {
+    const ids = (o.assignedMemberIds && o.assignedMemberIds.length > 0
+      ? o.assignedMemberIds
+      : o.assignedMemberId
+      ? [o.assignedMemberId]
+      : []
+    ).filter(Boolean);
+    const names = (o.assignedMemberNames && o.assignedMemberNames.length > 0
+      ? o.assignedMemberNames
+      : o.assignedMemberName
+      ? [o.assignedMemberName]
+      : []
+    ).filter(Boolean);
+    const encodedIds = ids.length > 0 ? `${o.assignedByCreator ? 'CREATOR::' : ''}${ids.join(',')}` : null;
+    const encodedNames = names.length > 0 ? names.join(' | ') : null;
+
+    return upsert('orders', {
       id: o.id,
       user_id: o.userId,
       client_name: o.clientName,
@@ -230,10 +285,11 @@ export const sbSync = {
       admin_notes: o.adminNotes || '',
       accepted_by_id: o.acceptedById || null,
       accepted_by_name: o.acceptedByName || null,
-      assigned_member_id: o.assignedMemberId || null,
-      assigned_member_name: o.assignedMemberName || null,
+      assigned_member_id: encodedIds,
+      assigned_member_name: encodedNames,
       created_at: o.createdAt || new Date().toISOString(),
-    }),
+    });
+  },
 
   upsertProject: (p: Project) =>
     upsert('projects', {
@@ -311,14 +367,23 @@ export const sbSync = {
       timestamp: a.timestamp || new Date().toISOString(),
     }),
 
-  upsertNotification: (n: NotificationItem) =>
-    upsert('notifications', {
+  upsertNotification: (n: NotificationItem) => {
+    const encodedLabel = `META::${JSON.stringify({
+      t: n.time,
+      scope: n.targetScope || 'creator',
+      ...(n.targetUserIds?.length ? { to: n.targetUserIds } : {}),
+      ...(n.category ? { cat: n.category } : {}),
+      ...(n.actionMenu ? { menu: n.actionMenu } : {}),
+      ...(n.readByUserIds?.length ? { rb: n.readByUserIds } : {}),
+    })}`;
+    return upsert('notifications', {
       id: n.id,
       message: n.message,
       read: Boolean(n.read),
-      time_label: n.time,
+      time_label: encodedLabel,
       created_at: new Date().toISOString(),
-    }),
+    });
+  },
 
   clearNotifications: async () => {
     try {

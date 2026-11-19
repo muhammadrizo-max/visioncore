@@ -14,15 +14,25 @@ import {
   Edit2, 
   ExternalLink, 
   Layers,
-  X
+  X,
+  Bell,
+  Lock
 } from 'lucide-react';
 import { User, SiteSettings, Order, Project, Task, NoteItem, PortfolioItem } from '../types';
 import { readImageFileFromGallery } from '../lib/imageUtils';
+
+export interface UserWorkspacePrefs {
+  backgroundType: 'default' | 'matrix' | 'custom_image';
+  backgroundImage: string;
+  groupChatNotifications: boolean;
+}
 
 interface SettingsViewProps {
   user: User;
   darkMode: boolean;
   onToggleDarkMode: () => void;
+  userPrefs: UserWorkspacePrefs;
+  onUpdateUserPrefs: (prefs: UserWorkspacePrefs) => void;
   siteSettings: SiteSettings;
   onUpdateSiteSettings: (settings: SiteSettings) => void;
   allUsers: User[];
@@ -37,6 +47,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   user,
   darkMode,
   onToggleDarkMode,
+  userPrefs,
+  onUpdateUserPrefs,
   siteSettings,
   onUpdateSiteSettings,
   allUsers,
@@ -46,7 +58,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   notes,
   onRestoreBackup
 }) => {
-  // Strictly ONLY Creator controls site branding, portfolio, background and backups
+  // Strictly ONLY Creator controls site branding, portfolio and backups
   const isCreator = user.role === 'creator';
 
   // Site general settings
@@ -56,11 +68,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [heroTitle, setHeroTitle] = useState(siteSettings.heroTitle || '');
   const [heroSubtitle, setHeroSubtitle] = useState(siteSettings.heroSubtitle || '');
 
-  // Background settings
+  // Background settings (personal for every member; Creator also syncs creatorBackgroundType)
   const [bgType, setBgType] = useState<'default' | 'matrix' | 'custom_image'>(
-    siteSettings.creatorBackgroundType || 'default'
+    userPrefs.backgroundType || 'default'
   );
-  const [bgImage, setBgImage] = useState(siteSettings.creatorBackgroundImage || '');
+  const [bgImage, setBgImage] = useState(userPrefs.backgroundImage || '');
   const bgFileInputRef = useRef<HTMLInputElement>(null);
 
   // Portfolio list
@@ -80,25 +92,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const [savedStatus, setSavedStatus] = useState(false);
 
-  // Sync local state when remote siteSettings updates
+  // Sync local state when remote siteSettings / userPrefs updates
   useEffect(() => {
     setSiteName(siteSettings.siteName || 'VisionCore Group');
     setTelegramUsername(siteSettings.telegramUsername || '@visioncore_admin');
     setPhoneContact(siteSettings.phoneContact || '+998 90 000 00 00');
     setHeroTitle(siteSettings.heroTitle || '');
     setHeroSubtitle(siteSettings.heroSubtitle || '');
-    setBgType(siteSettings.creatorBackgroundType || 'default');
-    setBgImage(siteSettings.creatorBackgroundImage || '');
     setPortfolioList(siteSettings.portfolio || []);
   }, [siteSettings]);
 
+  useEffect(() => {
+    setBgType(userPrefs.backgroundType || 'default');
+    setBgImage(userPrefs.backgroundImage || '');
+  }, [userPrefs]);
+
   const handleSelectBackgroundType = (nextType: 'default' | 'matrix' | 'custom_image') => {
     setBgType(nextType);
-    onUpdateSiteSettings({
-      ...siteSettings,
-      creatorBackgroundType: nextType,
-      creatorBackgroundImage: bgImage
+    onUpdateUserPrefs({
+      ...userPrefs,
+      backgroundType: nextType,
+      backgroundImage: bgImage,
     });
+    if (isCreator) {
+      onUpdateSiteSettings({
+        ...siteSettings,
+        creatorBackgroundType: nextType,
+        creatorBackgroundImage: bgImage,
+      });
+    }
   };
 
   const handleGalleryBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,11 +130,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const compressed = await readImageFileFromGallery(file, 1920, 0.84);
       setBgImage(compressed);
       setBgType('custom_image');
-      onUpdateSiteSettings({
-        ...siteSettings,
-        creatorBackgroundType: 'custom_image',
-        creatorBackgroundImage: compressed
+      onUpdateUserPrefs({
+        ...userPrefs,
+        backgroundType: 'custom_image',
+        backgroundImage: compressed,
       });
+      if (isCreator) {
+        onUpdateSiteSettings({
+          ...siteSettings,
+          creatorBackgroundType: 'custom_image',
+          creatorBackgroundImage: compressed,
+        });
+      }
     } catch {
       // ignore
     }
@@ -478,119 +507,195 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* CREATOR ONLY SECTIONS */}
-      {isCreator && (
-        <form onSubmit={handleSaveAllSettings} className="space-y-6">
-          
-          {/* 2. Creator Visual Theme (Instant Background Switch + Gallery Upload) */}
-          <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Boshqaruv Paneli Orqa Foni
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Tanlaganingiz zahoti darhol qo'llaniladi: toza fon, raqamlar yomg'iri yoki galereyadan shaxsiy rasm
-                </p>
-              </div>
+      {/* 2. Workspace Background (Available for ALL Members & Users) */}
+      <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Boshqaruv Paneli Orqa Foni
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Tanlaganingiz zahoti darhol qo'llaniladi: standart rejim, raqamlar yomg'iri yoki galereyadan shaxsiy rasm
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+          <button
+            type="button"
+            onClick={() => handleSelectBackgroundType('default')}
+            className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+              bgType === 'default'
+                ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500'
+                : 'liquid-glass-subtle'
+            }`}
+          >
+            <div className="font-bold text-xs text-slate-900 dark:text-white mb-1">Standart Rejim</div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">Toza gradient va Liquid Glass (yomg'irsiz)</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectBackgroundType('matrix')}
+            className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+              bgType === 'matrix'
+                ? 'border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500'
+                : 'liquid-glass-subtle'
+            }`}
+          >
+            <div className="font-bold text-xs text-emerald-600 dark:text-emerald-400 mb-1 flex items-center space-x-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Raqamlar Yomg'iri (Matrix)</span>
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">Tiniq kiber animatsion raqamlar oqimi</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectBackgroundType('custom_image')}
+            className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
+              bgType === 'custom_image'
+                ? 'border-purple-500 bg-purple-500/15 ring-1 ring-purple-500'
+                : 'liquid-glass-subtle'
+            }`}
+          >
+            <div className="font-bold text-xs text-purple-600 dark:text-purple-400 mb-1 flex items-center space-x-1.5">
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span>Shaxsiy Fon Rasmi</span>
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">Galereyadan tanlangan rasm foni</div>
+          </button>
+        </div>
+
+        {bgType === 'custom_image' && (
+          <div className="pt-2 space-y-3">
+            <input
+              ref={bgFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleGalleryBgUpload}
+              className="hidden"
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => bgFileInputRef.current?.click()}
+                className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center space-x-2 shadow-md cursor-pointer"
+              >
+                <ImageIcon className="w-4 h-4" />
+                <span>Galereyadan Fon Rasmi Tanlash</span>
+              </button>
+
+              {bgImage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBgImage('');
+                    onUpdateUserPrefs({
+                      ...userPrefs,
+                      backgroundType: 'custom_image',
+                      backgroundImage: '',
+                    });
+                    if (isCreator) {
+                      onUpdateSiteSettings({
+                        ...siteSettings,
+                        creatorBackgroundType: 'custom_image',
+                        creatorBackgroundImage: '',
+                      });
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl liquid-glass-subtle text-xs font-bold text-rose-500 hover:bg-rose-500/10 cursor-pointer"
+                >
+                  Rasmni tozalash
+                </button>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => handleSelectBackgroundType('default')}
-                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
-                  bgType === 'default' 
-                    ? 'border-blue-500 bg-blue-500/15 ring-1 ring-blue-500' 
-                    : 'liquid-glass-subtle'
-                }`}
-              >
-                <div className="font-bold text-xs text-slate-900 dark:text-white mb-1">Standart Rejim</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Toza gradient va Liquid Glass (yomg'irsiz)</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectBackgroundType('matrix')}
-                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
-                  bgType === 'matrix' 
-                    ? 'border-emerald-500 bg-emerald-500/15 ring-1 ring-emerald-500' 
-                    : 'liquid-glass-subtle'
-                }`}
-              >
-                <div className="font-bold text-xs text-emerald-600 dark:text-emerald-400 mb-1 flex items-center space-x-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Raqamlar Yomg'iri (Matrix)</span>
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Tiniq kiber animatsion raqamlar oqimi</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSelectBackgroundType('custom_image')}
-                className={`p-3.5 rounded-2xl border text-left transition cursor-pointer ${
-                  bgType === 'custom_image' 
-                    ? 'border-purple-500 bg-purple-500/15 ring-1 ring-purple-500' 
-                    : 'liquid-glass-subtle'
-                }`}
-              >
-                <div className="font-bold text-xs text-purple-600 dark:text-purple-400 mb-1 flex items-center space-x-1.5">
-                  <ImageIcon className="w-3.5 h-3.5" />
-                  <span>Shaxsiy Fon Rasmi</span>
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Galereyadan tanlangan rasm foni</div>
-              </button>
-            </div>
-
-            {bgType === 'custom_image' && (
-              <div className="pt-2 space-y-3">
-                <input
-                  ref={bgFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleGalleryBgUpload}
-                  className="hidden"
-                />
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => bgFileInputRef.current?.click()}
-                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center space-x-2 shadow-md cursor-pointer"
-                  >
-                    <ImageIcon className="w-4 h-4" />
-                    <span>Galereyadan Fon Rasmi Tanlash</span>
-                  </button>
-
-                  {bgImage && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBgImage('');
-                        onUpdateSiteSettings({
-                          ...siteSettings,
-                          creatorBackgroundType: 'custom_image',
-                          creatorBackgroundImage: ''
-                        });
-                      }}
-                      className="px-3.5 py-2 rounded-xl liquid-glass-subtle text-xs font-bold text-rose-500 hover:bg-rose-500/10 cursor-pointer"
-                    >
-                      Rasmni tozalash
-                    </button>
-                  )}
-                </div>
-
-                {bgImage && (
-                  <div className="rounded-2xl overflow-hidden border border-purple-500/30 max-w-sm">
-                    <img src={bgImage} alt="Orqa fon preview" className="w-full h-32 object-cover" />
-                  </div>
-                )}
+            {bgImage && (
+              <div className="rounded-2xl overflow-hidden border border-purple-500/30 max-w-sm">
+                <img src={bgImage} alt="Orqa fon preview" className="w-full h-32 object-cover" />
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* 3. Notifications Preferences (Group Chat toggleable, Private DM always ON) */}
+      <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-4">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-500 flex items-center justify-center">
+            <Bell className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              Bildirishnomalar Sozlamalari
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Suhbat xabarlari bo'yicha bildirishnomalarni boshqaring
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          {/* Toggleable Group Chat Notifications */}
+          <button
+            type="button"
+            onClick={() =>
+              onUpdateUserPrefs({
+                ...userPrefs,
+                groupChatNotifications: !userPrefs.groupChatNotifications,
+              })
+            }
+            className="p-4 rounded-2xl liquid-glass-subtle border border-slate-300/60 dark:border-white/10 flex items-center justify-between gap-3 text-left transition hover:border-blue-500/40 cursor-pointer"
+          >
+            <div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white">
+                Umumiy guruh chati bildirishnomalari
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {userPrefs.groupChatNotifications
+                  ? "Yoniq — guruhga yangi xabar kelganda bildirishnoma chiqadi"
+                  : "O'chiq — guruh xabarlari uchun bildirishnoma kelmaydi"}
+              </div>
+            </div>
+            <div
+              className={`w-12 h-6 rounded-full p-0.5 transition flex-shrink-0 ${
+                userPrefs.groupChatNotifications ? 'bg-blue-600' : 'bg-slate-400 dark:bg-slate-700'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  userPrefs.groupChatNotifications ? 'translate-x-6' : 'translate-x-0'
+                }`}
+              />
+            </div>
+          </button>
+
+          {/* Mandatory Private Chat (DM) Notifications */}
+          <div className="p-4 rounded-2xl liquid-glass-subtle border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                <span>Shaxsiy chat bildirishnomalari</span>
+                <Lock className="w-3 h-3 text-emerald-500" />
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Shaxsiy xabarlar muhimligi sababli doim yoniq turadi (o'chirib bo'lmaydi)
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold uppercase whitespace-nowrap">
+              Doim yoniq
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* CREATOR ONLY SECTIONS */}
+      {isCreator && (
+        <form onSubmit={handleSaveAllSettings} className="space-y-6">
 
           {/* 3. PORTFOLIO & DONE WORKS MANAGEMENT */}
           <div className="p-6 sm:p-8 rounded-3xl liquid-glass space-y-5">

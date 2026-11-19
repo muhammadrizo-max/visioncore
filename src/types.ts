@@ -58,6 +58,9 @@ export interface Order {
   acceptedByName?: string;
   assignedMemberId?: string;
   assignedMemberName?: string;
+  assignedMemberIds?: string[];
+  assignedMemberNames?: string[];
+  assignedByCreator?: boolean;
 }
 
 export interface Task {
@@ -233,4 +236,9 @@ export interface NotificationItem {
   message: string;
   read: boolean;
   time: string;
+  targetScope?: 'creator' | 'team' | 'specific';
+  targetUserIds?: string[];
+  category?: 'system' | 'order' | 'task' | 'chat_group' | 'chat_dm';
+  actionMenu?: string;
+  readByUserIds?: string[];
 }
