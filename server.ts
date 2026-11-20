@@ -630,6 +630,15 @@ app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
 
   const result: Record<string, unknown[]> = {};
 
+  const [orderAssignMetaRes, notifMetaRes] = await Promise.all([
+    db.from('site_settings').select('data').eq('id', 'order_assignments').maybeSingle(),
+    db.from('site_settings').select('data').eq('id', 'notifications_meta').maybeSingle(),
+  ]);
+  const orderAssignmentsMap: Record<string, any> =
+    (orderAssignMetaRes.data?.data as any)?.items || {};
+  const notifMetaMap: Record<string, any> =
+    (notifMetaRes.data?.data as any)?.items || {};
+
   await Promise.all(
     Object.entries(TABLES).map(async ([table, cfg]) => {
       if ((table === 'tasks' || table === 'activities') && isUser) {
@@ -663,20 +672,35 @@ app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
       if (error) {
         console.warn(`[sync:${table}]`, error.message);
         result[table] = [];
-      } else if (table === 'notifications' && !isCreator) {
-        result[table] = (data ?? []).filter((r: any) => {
-          const rawLabel = String(r.time_label || '');
-          if (!rawLabel.startsWith('META::')) return false;
-          try {
-            const meta = JSON.parse(rawLabel.slice(6));
+      } else if (table === 'orders') {
+        result[table] = (data ?? []).map((r: any) => ({
+          ...r,
+          ...(orderAssignmentsMap[r.id] ? { _assignmentMeta: orderAssignmentsMap[r.id] } : {}),
+        }));
+      } else if (table === 'notifications') {
+        const enriched = (data ?? []).map((r: any) => ({
+          ...r,
+          ...(notifMetaMap[r.id] ? { _notifMeta: notifMetaMap[r.id] } : {}),
+        }));
+        if (isCreator) {
+          result[table] = enriched;
+        } else {
+          result[table] = enriched.filter((r: any) => {
+            let meta = r._notifMeta;
+            if (!meta && String(r.time_label || '').startsWith('META::')) {
+              try {
+                meta = JSON.parse(String(r.time_label).slice(6));
+              } catch {
+                meta = null;
+              }
+            }
+            if (!meta) return false;
             const scope = meta.scope || 'creator';
             if (scope === 'team' && !isUser) return true;
             if (scope === 'specific' && Array.isArray(meta.to) && meta.to.includes(session.sub)) return true;
             return false;
-          } catch {
-            return false;
-          }
-        });
+          });
+        }
       } else {
         result[table] = data ?? [];
       }
@@ -786,6 +810,39 @@ app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
       }
       row.user_id = session.sub;
     }
+
+    // Ensure PostgreSQL VARCHAR(30) bounds on IDs
+    if (typeof row.accepted_by_id === 'string') {
+      row.accepted_by_id = str(row.accepted_by_id, 30) || null;
+    }
+    if (typeof row.assigned_member_id === 'string') {
+      const cleanFirstId = row.assigned_member_id.replace(/^CREATOR::/, '').split(',')[0].trim();
+      row.assigned_member_id = cleanFirstId ? cleanFirstId.slice(0, 30) : null;
+    }
+    if (typeof row.assigned_member_name === 'string') {
+      const cleanFirstName = row.assigned_member_name.split('|')[0].trim();
+      row.assigned_member_name = cleanFirstName ? cleanFirstName.slice(0, 100) : null;
+    }
+
+    const assignmentMeta = req.body?.assignmentMeta;
+    if (!isUser && assignmentMeta && typeof assignmentMeta === 'object') {
+      const { data: curAssign } = await db
+        .from('site_settings')
+        .select('data')
+        .eq('id', 'order_assignments')
+        .maybeSingle();
+      const items = { ...((curAssign?.data as any)?.items || {}) };
+      items[rowId] = {
+        ids: Array.isArray(assignmentMeta.ids) ? assignmentMeta.ids.slice(0, 5) : [],
+        names: Array.isArray(assignmentMeta.names) ? assignmentMeta.names.slice(0, 5) : [],
+        byCreator: Boolean(assignmentMeta.byCreator),
+      };
+      await db.from('site_settings').upsert({
+        id: 'order_assignments',
+        data: { items },
+        updated_at: new Date().toISOString(),
+      });
+    }
   } else if (cfg.strict && cfg.owner) {
     const { data: existing } = await db
       .from(table)
@@ -813,34 +870,58 @@ app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
   } else if (table === 'activities') {
     row.user_id = session.sub;
   } else if (table === 'notifications') {
+    // Enforce VARCHAR(50) limit on time_label cleanly
+    row.time_label = str(row.time_label || '', 45);
+    const incomingMeta = req.body?.notifMeta;
+
+    const { data: metaRow } = await db
+      .from('site_settings')
+      .select('data')
+      .eq('id', 'notifications_meta')
+      .maybeSingle();
+    const metaItems: Record<string, any> = { ...((metaRow?.data as any)?.items || {}) };
+
     if (!isCreator) {
       const { data: existingNotif } = await db
         .from('notifications')
         .select('id, message, read, time_label, created_at')
         .eq('id', rowId)
         .maybeSingle();
+
       if (existingNotif) {
-        // Allow recipients to append their userId into readByUserIds inside time_label metadata
-        const curLabel = String(existingNotif.time_label || '');
-        if (!curLabel.startsWith('META::')) {
-          fail(res, 403, 'Faqat creator bildirishnomalarni tahrirlay oladi');
-          return;
-        }
-        try {
-          const curMeta = JSON.parse(curLabel.slice(6));
-          const rb: string[] = Array.isArray(curMeta.rb) ? curMeta.rb : [];
-          if (!rb.includes(session.sub)) rb.push(session.sub);
-          row.message = existingNotif.message;
-          row.read = existingNotif.read;
-          row.time_label = `META::${JSON.stringify({ ...curMeta, rb })}`;
-          row.created_at = existingNotif.created_at;
-        } catch {
-          fail(res, 403, 'Faqat creator bildirishnomalarni tahrirlay oladi');
-          return;
-        }
+        const curMeta = metaItems[rowId] || {};
+        const rb: string[] = Array.isArray(curMeta.rb) ? [...curMeta.rb] : [];
+        if (!rb.includes(session.sub)) rb.push(session.sub);
+        metaItems[rowId] = { ...curMeta, rb };
+
+        await db.from('site_settings').upsert({
+          id: 'notifications_meta',
+          data: { items: metaItems },
+          updated_at: new Date().toISOString(),
+        });
+
+        row.message = existingNotif.message;
+        row.read = existingNotif.read;
+        row.time_label = str(existingNotif.time_label || '', 45);
+        row.created_at = existingNotif.created_at;
       } else {
         row.read = false;
+        if (incomingMeta && typeof incomingMeta === 'object') {
+          metaItems[rowId] = incomingMeta;
+          await db.from('site_settings').upsert({
+            id: 'notifications_meta',
+            data: { items: metaItems },
+            updated_at: new Date().toISOString(),
+          });
+        }
       }
+    } else if (incomingMeta && typeof incomingMeta === 'object') {
+      metaItems[rowId] = incomingMeta;
+      await db.from('site_settings').upsert({
+        id: 'notifications_meta',
+        data: { items: metaItems },
+        updated_at: new Date().toISOString(),
+      });
     }
   }
 
@@ -903,6 +984,11 @@ app.post('/api/db/notifications/clear', requireCreator, asyncRoute(async (_req, 
     fail(res, 500, error.message);
     return;
   }
+  await db.from('site_settings').upsert({
+    id: 'notifications_meta',
+    data: { items: {} },
+    updated_at: new Date().toISOString(),
+  });
   res.json({ ok: true });
 }));
 
@@ -951,23 +1037,30 @@ app.get('/api/chats', requireAuth, asyncRoute(async (req, res) => {
     .order('created_at', { ascending: true })
     .order('id', { ascending: true });
 
-  res.json(
-    (data ?? []).map((r: any) => ({
-      id: r.id,
-      senderId: r.sender_id,
-      senderName: r.sender_name,
-      senderRole: r.sender_role,
-      senderAvatar: r.sender_avatar,
-      text: r.text,
-      timestamp: r.timestamp_label || new Date(r.created_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
-      createdAt: r.created_at,
-      chatId: r.chat_id || 'general',
-      attachmentUrl: r.attachment_url,
-      isEdited: Boolean(r.is_edited),
-      audioUrl: r.audio_url,
-      audioDuration: r.audio_duration,
-    })),
-  );
+  const mapped = (data ?? []).map((r: any) => ({
+    id: r.id,
+    senderId: r.sender_id,
+    senderName: r.sender_name,
+    senderRole: r.sender_role,
+    senderAvatar: r.sender_avatar,
+    text: r.text,
+    timestamp: r.timestamp_label || new Date(r.created_at).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+    createdAt: r.created_at,
+    chatId: r.chat_id || 'general',
+    attachmentUrl: r.attachment_url,
+    isEdited: Boolean(r.is_edited),
+    audioUrl: r.audio_url,
+    audioDuration: r.audio_duration,
+  }));
+
+  mapped.sort((a: any, b: any) => {
+    const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+    if (ta !== tb) return ta - tb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  res.json(mapped);
 }));
 
 app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
@@ -979,7 +1072,7 @@ app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
   }
   const msgId = str(m.id, 80);
 
-  // Preserve original created_at on edits/retries, otherwise assign monotonic server timestamp
+  // Preserve original created_at on edits/retries, otherwise assign strictly latest DB timestamp
   const { data: existingRow } = await db
     .from('chats')
     .select('created_at, sender_id')
@@ -991,7 +1084,24 @@ app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
     return;
   }
 
-  const authoritativeCreatedAt = existingRow?.created_at || nextServerChatIso();
+  let authoritativeCreatedAt = existingRow?.created_at;
+  if (!authoritativeCreatedAt) {
+    const { data: maxChatRow } = await db
+      .from('chats')
+      .select('created_at')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const maxDbMs = maxChatRow?.created_at ? Date.parse(maxChatRow.created_at) : 0;
+    const nextMs = Math.max(
+      Date.now(),
+      !Number.isNaN(maxDbMs) && maxDbMs > 0 ? maxDbMs + 10 : 0,
+      lastServerChatMs + 1
+    );
+    lastServerChatMs = nextMs;
+    authoritativeCreatedAt = new Date(nextMs).toISOString();
+  }
 
   const { error } = await db.from('chats').upsert({
     id: msgId,

@@ -408,11 +408,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
   }, [chats, selectedChatId, currentUser.id, currentClearedCutoffMs, inChatSearchQuery]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior });
+    const performScroll = () => {
+      const container = feedContainerRef.current;
+      if (container) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior,
+        });
+      }
+      messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
       setShowScrollBottomBtn(false);
       setUnseenCount(0);
-    });
+    };
+    requestAnimationFrame(performScroll);
+    setTimeout(performScroll, 80);
   }, []);
 
   // Scroll to bottom when switching chat or opening chat view on mobile
@@ -420,9 +429,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
     prevVisibleCountRef.current = filteredMessages.length;
     isNearBottomRef.current = true;
     scrollToBottom('auto');
-  }, [selectedChatId, mobileView]);
+  }, [selectedChatId, mobileView, scrollToBottom]);
 
-  // Smart auto-scroll when new messages arrive
+  // Smart auto-scroll when new messages arrive or own message updates
   useEffect(() => {
     const prevCount = prevVisibleCountRef.current;
     const nextCount = filteredMessages.length;

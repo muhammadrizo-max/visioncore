@@ -69,17 +69,30 @@ export async function fetchAllFromSupabase(): Promise<SupabaseSyncPayload | null
     return {
       users: (raw.users ?? []).map(mapUser),
       orders: (raw.orders ?? []).map((r: any) => {
-        const rawIdStr = String(r.assigned_member_id || '');
-        const byCreator = rawIdStr.startsWith('CREATOR::');
-        const cleanedIdStr = byCreator ? rawIdStr.slice(9) : rawIdStr;
-        const ids = cleanedIdStr
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter(Boolean);
-        const names = String(r.assigned_member_name || '')
-          .split('|')
-          .map((s: string) => s.trim())
-          .filter(Boolean);
+        const meta = r._assignmentMeta;
+        let ids: string[] = [];
+        let names: string[] = [];
+        let byCreator = false;
+
+        if (meta && Array.isArray(meta.ids)) {
+          ids = meta.ids.map((s: any) => String(s).trim()).filter(Boolean);
+          names = Array.isArray(meta.names)
+            ? meta.names.map((s: any) => String(s).trim()).filter(Boolean)
+            : [];
+          byCreator = Boolean(meta.byCreator);
+        } else {
+          const rawIdStr = String(r.assigned_member_id || '');
+          byCreator = rawIdStr.startsWith('CREATOR::');
+          const cleanedIdStr = byCreator ? rawIdStr.slice(9) : rawIdStr;
+          ids = cleanedIdStr
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+          names = String(r.assigned_member_name || '')
+            .split('|')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        }
 
         return {
           id: r.id,
@@ -164,20 +177,34 @@ export async function fetchAllFromSupabase(): Promise<SupabaseSyncPayload | null
         timestamp: r.timestamp,
       })),
       notifications: (raw.notifications ?? []).map((r: any) => {
+        const meta = r._notifMeta;
+        if (meta && typeof meta === 'object') {
+          return {
+            id: r.id,
+            message: r.message,
+            read: Boolean(r.read),
+            time: meta.t || r.time_label || LOCAL_TIME(r.created_at),
+            targetScope: meta.scope || 'creator',
+            targetUserIds: Array.isArray(meta.to) ? meta.to : undefined,
+            category: meta.cat || 'system',
+            actionMenu: meta.menu || undefined,
+            readByUserIds: Array.isArray(meta.rb) ? meta.rb : undefined,
+          };
+        }
         const rawLabel = String(r.time_label || '');
         if (rawLabel.startsWith('META::')) {
           try {
-            const meta = JSON.parse(rawLabel.slice(6));
+            const legacy = JSON.parse(rawLabel.slice(6));
             return {
               id: r.id,
               message: r.message,
               read: Boolean(r.read),
-              time: meta.t || LOCAL_TIME(r.created_at),
-              targetScope: meta.scope || 'creator',
-              targetUserIds: Array.isArray(meta.to) ? meta.to : undefined,
-              category: meta.cat || 'system',
-              actionMenu: meta.menu || undefined,
-              readByUserIds: Array.isArray(meta.rb) ? meta.rb : undefined,
+              time: legacy.t || LOCAL_TIME(r.created_at),
+              targetScope: legacy.scope || 'creator',
+              targetUserIds: Array.isArray(legacy.to) ? legacy.to : undefined,
+              category: legacy.cat || 'system',
+              actionMenu: legacy.menu || undefined,
+              readByUserIds: Array.isArray(legacy.rb) ? legacy.rb : undefined,
             };
           } catch {
             // fallback
@@ -200,9 +227,9 @@ export async function fetchAllFromSupabase(): Promise<SupabaseSyncPayload | null
   }
 }
 
-const upsert = async (table: string, row: Record<string, unknown>) => {
+const upsert = async (table: string, row: Record<string, unknown>, extra?: Record<string, unknown>) => {
   try {
-    await api(`/api/db/${table}/upsert`, { method: 'POST', body: JSON.stringify({ row }) });
+    await api(`/api/db/${table}/upsert`, { method: 'POST', body: JSON.stringify({ row, ...extra }) });
   } catch (err) {
     console.error(`[sync:${table}]`, err);
   }
@@ -267,28 +294,36 @@ export const sbSync = {
       ? [o.assignedMemberName]
       : []
     ).filter(Boolean);
-    const encodedIds = ids.length > 0 ? `${o.assignedByCreator ? 'CREATOR::' : ''}${ids.join(',')}` : null;
-    const encodedNames = names.length > 0 ? names.join(' | ') : null;
 
-    return upsert('orders', {
-      id: o.id,
-      user_id: o.userId,
-      client_name: o.clientName,
-      client_phone: o.clientPhone,
-      client_telegram: o.clientTelegram,
-      project_type: o.projectType,
-      project_name: o.projectName,
-      description: o.description,
-      budget: o.budget || '',
-      deadline: o.deadline || '',
-      status: o.status,
-      admin_notes: o.adminNotes || '',
-      accepted_by_id: o.acceptedById || null,
-      accepted_by_name: o.acceptedByName || null,
-      assigned_member_id: encodedIds,
-      assigned_member_name: encodedNames,
-      created_at: o.createdAt || new Date().toISOString(),
-    });
+    return upsert(
+      'orders',
+      {
+        id: o.id,
+        user_id: o.userId,
+        client_name: o.clientName,
+        client_phone: o.clientPhone,
+        client_telegram: o.clientTelegram,
+        project_type: o.projectType,
+        project_name: o.projectName,
+        description: o.description,
+        budget: o.budget || '',
+        deadline: o.deadline || '',
+        status: o.status,
+        admin_notes: o.adminNotes || '',
+        accepted_by_id: o.acceptedById ? String(o.acceptedById).slice(0, 30) : null,
+        accepted_by_name: o.acceptedByName || null,
+        assigned_member_id: ids[0] ? String(ids[0]).slice(0, 30) : null,
+        assigned_member_name: names[0] ? String(names[0]).slice(0, 100) : null,
+        created_at: o.createdAt || new Date().toISOString(),
+      },
+      {
+        assignmentMeta: {
+          ids,
+          names,
+          byCreator: Boolean(o.assignedByCreator),
+        },
+      }
+    );
   },
 
   upsertProject: (p: Project) =>
@@ -368,21 +403,25 @@ export const sbSync = {
     }),
 
   upsertNotification: (n: NotificationItem) => {
-    const encodedLabel = `META::${JSON.stringify({
+    const notifMeta = {
       t: n.time,
       scope: n.targetScope || 'creator',
       ...(n.targetUserIds?.length ? { to: n.targetUserIds } : {}),
       ...(n.category ? { cat: n.category } : {}),
       ...(n.actionMenu ? { menu: n.actionMenu } : {}),
       ...(n.readByUserIds?.length ? { rb: n.readByUserIds } : {}),
-    })}`;
-    return upsert('notifications', {
-      id: n.id,
-      message: n.message,
-      read: Boolean(n.read),
-      time_label: encodedLabel,
-      created_at: new Date().toISOString(),
-    });
+    };
+    return upsert(
+      'notifications',
+      {
+        id: n.id,
+        message: n.message,
+        read: Boolean(n.read),
+        time_label: String(n.time || '').slice(0, 45),
+        created_at: new Date().toISOString(),
+      },
+      { notifMeta }
+    );
   },
 
   clearNotifications: async () => {
