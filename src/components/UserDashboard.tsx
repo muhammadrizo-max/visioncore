@@ -23,7 +23,7 @@ import {
   Megaphone,
   Check
 } from 'lucide-react';
-import { User, ReminderPlan, Order, Project, Task, MemberActivity, SiteSettings } from '../types';
+import { User, ReminderPlan, Order, Project, Task, MemberActivity, SiteSettings, OnlineUserInfo } from '../types';
 import { PortfolioShowcase } from './PortfolioShowcase';
 
 interface UserDashboardProps {
@@ -35,6 +35,7 @@ interface UserDashboardProps {
   tasks: Task[];
   activities: MemberActivity[];
   siteSettings: SiteSettings;
+  onlineUsers?: OnlineUserInfo[];
   onAddReminder: (title: string, date: string) => void;
   onToggleReminder: (id: string) => void;
   onDeleteReminder: (id: string) => void;
@@ -52,6 +53,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   tasks,
   activities,
   siteSettings,
+  onlineUsers = [],
   onAddReminder,
   onToggleReminder,
   onDeleteReminder,
@@ -256,7 +258,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Jamoa & Userlar</span>
                 <Users className="w-5 h-5" />
               </div>
-              <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{allUsers.length} ta</div>
+              <div className="mt-2 flex items-baseline space-x-2">
+                <span className="text-2xl font-black text-slate-900 dark:text-white">{allUsers.length} ta</span>
+                <span className="text-[11px] font-bold text-emerald-500">
+                  • {onlineUsers.length || 1} online
+                </span>
+              </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
                 {allUsers.filter(u => u.role !== 'user').length} ta a'zo • {allUsers.filter(u => u.role === 'user').length} ta user
               </span>
@@ -476,7 +483,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           >
             <div>
               <span className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">Jamoa Chati</span>
-              <div className="text-sm font-black text-slate-900 dark:text-white mt-1">Real-time aloqa</div>
+              <div className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                {onlineUsers.length || 1} ta foydalanuvchi online
+              </div>
               <span className="text-[11px] text-emerald-500 font-semibold">Suhbatga o'tish &rarr;</span>
             </div>
             <ArrowRight className="w-5 h-5 text-emerald-500" />

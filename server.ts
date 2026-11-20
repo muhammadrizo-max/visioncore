@@ -652,6 +652,8 @@ app.get('/api/sync', requireAuth, asyncRoute(async (req, res) => {
         q = q.or(`chat_id.eq.general,sender_id.eq.${session.sub},chat_id.ilike.%${safeSub}%`);
       } else if (table === 'reminders') {
         q = q.eq('user_id', session.sub);
+      } else if (table === 'site_settings') {
+        q = q.eq('id', 'default');
       }
 
       q = q.order(cfg.order, { ascending: Boolean(cfg.asc) });
@@ -733,6 +735,7 @@ app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
       row.username = cleanU;
     }
   } else if (table === 'site_settings') {
+    row.id = 'default';
     if (!isCreator) {
       // Allow non-creator users only to mark broadcasts as read without overwriting site settings
       const incomingData = (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, unknown>;
@@ -763,7 +766,6 @@ app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
         return { ...bc, readByUserIds: [...existingReads, session.sub] };
       });
 
-      row.id = 'default';
       row.data = { ...currentData, broadcasts: mergedBroadcasts };
     }
   } else if (table === 'projects' || table === 'tasks') {
@@ -797,6 +799,16 @@ app.post('/api/db/:table/upsert', requireAuth, asyncRoute(async (req, res) => {
     }
     if (!isCreator || !existing) {
       row[cfg.owner] = session.sub;
+    }
+    if (table === 'chats') {
+      const { data: existingChat } = await db
+        .from('chats')
+        .select('created_at')
+        .eq('id', rowId)
+        .maybeSingle();
+      if (existingChat?.created_at) {
+        row.created_at = existingChat.created_at;
+      }
     }
   } else if (table === 'activities') {
     row.user_id = session.sub;
@@ -894,7 +906,7 @@ app.post('/api/db/notifications/clear', requireCreator, asyncRoute(async (_req, 
   res.json({ ok: true });
 }));
 
-// ---------- Chats compatibility & live typing/recording presence ----------
+// ---------- Chats compatibility & live typing/recording + Real Online Presence ----------
 interface PresenceEntry {
   userId: string;
   userName: string;
@@ -903,6 +915,14 @@ interface PresenceEntry {
   expiresAt: number;
 }
 const chatPresence = new Map<string, PresenceEntry>();
+
+let lastServerChatMs = 0;
+function nextServerChatIso(): string {
+  const now = Date.now();
+  const next = now > lastServerChatMs ? now : lastServerChatMs + 1;
+  lastServerChatMs = next;
+  return new Date(next).toISOString();
+}
 
 function canonicalChatKey(rawChatId: string): string {
   const id = str(rawChatId || 'general', 120);
@@ -928,7 +948,8 @@ app.get('/api/chats', requireAuth, asyncRoute(async (req, res) => {
     .from('chats')
     .select(TABLES.chats.columns.join(', '))
     .or(`chat_id.eq.general,sender_id.eq.${session.sub},chat_id.ilike.%${safeSub}%`)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
 
   res.json(
     (data ?? []).map((r: any) => ({
@@ -953,17 +974,28 @@ app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
   const session = sessionOf(req);
   const m = req.body;
   if (!m || !m.id) {
-    fail(res, 400, 'Xabar formati noto\'g\'ri');
+    fail(res, 400, "Xabar formati noto'g'ri");
     return;
   }
-  const parsedCreatedAt =
-    typeof m.createdAt === 'string' && !Number.isNaN(Date.parse(m.createdAt))
-      ? new Date(m.createdAt).toISOString()
-      : new Date().toISOString();
+  const msgId = str(m.id, 80);
+
+  // Preserve original created_at on edits/retries, otherwise assign monotonic server timestamp
+  const { data: existingRow } = await db
+    .from('chats')
+    .select('created_at, sender_id')
+    .eq('id', msgId)
+    .maybeSingle();
+
+  if (existingRow && existingRow.sender_id !== session.sub && session.role !== 'creator') {
+    fail(res, 403, 'Ruxsat berilmagan');
+    return;
+  }
+
+  const authoritativeCreatedAt = existingRow?.created_at || nextServerChatIso();
 
   const { error } = await db.from('chats').upsert({
-    id: str(m.id, 80),
-    sender_id: session.sub,
+    id: msgId,
+    sender_id: existingRow?.sender_id || session.sub,
     sender_name: str(m.senderName, 150),
     sender_role: session.role,
     sender_avatar: str(m.senderAvatar, 2000),
@@ -974,15 +1006,54 @@ app.post('/api/chats', requireAuth, asyncRoute(async (req, res) => {
     is_edited: Boolean(m.isEdited),
     audio_url: typeof m.audioUrl === 'string' ? m.audioUrl : null,
     audio_duration: Number(m.audioDuration) || 0,
-    created_at: parsedCreatedAt,
+    created_at: authoritativeCreatedAt,
   });
   if (error) {
     fail(res, 500, error.message);
     return;
   }
-  // Clear sender presence immediately after sending message
+  // Clear sender typing/recording presence immediately after sending message
   chatPresence.delete(`${session.sub}::${canonicalChatKey(str(m.chatId || 'general', 120))}`);
-  res.json({ ok: true });
+  res.json({ ok: true, id: msgId, createdAt: authoritativeCreatedAt });
+}));
+
+app.get('/api/chats/clear-history', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const rowId = `chat_cleared_${session.sub}`;
+  const { data } = await db.from('site_settings').select('data').eq('id', rowId).maybeSingle();
+  const cleared = data?.data && typeof data.data === 'object' && (data.data as any).cleared
+    ? (data.data as any).cleared
+    : {};
+  res.json({ cleared });
+}));
+
+app.post('/api/chats/clear-history', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const chatKey = canonicalChatKey(str(req.body?.chatId || 'general', 120));
+  const clearedAtRaw = str(req.body?.clearedAt, 60);
+  const clearedAt = clearedAtRaw && !Number.isNaN(Date.parse(clearedAtRaw))
+    ? new Date(clearedAtRaw).toISOString()
+    : new Date().toISOString();
+
+  const rowId = `chat_cleared_${session.sub}`;
+  const { data: existing } = await db.from('site_settings').select('data').eq('id', rowId).maybeSingle();
+  const existingCleared =
+    existing?.data && typeof existing.data === 'object' && (existing.data as any).cleared
+      ? { ...(existing.data as any).cleared }
+      : {};
+
+  existingCleared[chatKey] = clearedAt;
+
+  const { error } = await db.from('site_settings').upsert({
+    id: rowId,
+    data: { cleared: existingCleared },
+    updated_at: new Date().toISOString(),
+  });
+  if (error) {
+    fail(res, 500, error.message);
+    return;
+  }
+  res.json({ ok: true, cleared: existingCleared });
 }));
 
 app.post('/api/chats/presence', requireAuth, (req, res) => {
@@ -1023,6 +1094,137 @@ app.get('/api/chats/presence', requireAuth, (req, res) => {
   }
   res.json({ active });
 });
+
+// ---------- Real Online Users Presence (Cross-instance via Supabase + Memory) ----------
+interface OnlineRecord {
+  userId: string;
+  username: string;
+  displayName: string;
+  role: string;
+  avatar?: string;
+  lastSeenAt: number;
+  currentMenu?: string;
+}
+
+const ONLINE_TTL_MS = 45_000;
+const ONLINE_PRESENCE_ROW_ID = 'online_presence';
+const memoryOnlineMap = new Map<string, OnlineRecord>();
+
+const roleRank = (role: string) => {
+  if (role === 'creator') return 0;
+  if (role !== 'user') return 1;
+  return 2;
+};
+
+function pruneAndSortOnline(records: Record<string, OnlineRecord>): OnlineRecord[] {
+  const cutoff = Date.now() - ONLINE_TTL_MS;
+  return Object.values(records)
+    .filter((r) => r && r.userId && typeof r.lastSeenAt === 'number' && r.lastSeenAt >= cutoff)
+    .sort((a, b) => {
+      const rankDiff = roleRank(a.role) - roleRank(b.role);
+      if (rankDiff !== 0) return rankDiff;
+      return (a.displayName || a.username).localeCompare(b.displayName || b.username);
+    });
+}
+
+async function syncOnlinePresenceRow(mutate?: (map: Record<string, OnlineRecord>) => void): Promise<OnlineRecord[]> {
+  const now = Date.now();
+  const cutoff = now - ONLINE_TTL_MS;
+  const merged: Record<string, OnlineRecord> = {};
+
+  for (const [uid, rec] of memoryOnlineMap.entries()) {
+    if (rec.lastSeenAt >= cutoff) merged[uid] = rec;
+    else memoryOnlineMap.delete(uid);
+  }
+
+  try {
+    const { data } = await db
+      .from('site_settings')
+      .select('data')
+      .eq('id', ONLINE_PRESENCE_ROW_ID)
+      .maybeSingle();
+
+    const storedUsers =
+      data?.data && typeof data.data === 'object' && (data.data as any).users
+        ? ((data.data as any).users as Record<string, OnlineRecord>)
+        : {};
+
+    for (const [uid, rec] of Object.entries(storedUsers)) {
+      if (rec && rec.lastSeenAt >= cutoff) {
+        const existing = merged[uid];
+        if (!existing || rec.lastSeenAt > existing.lastSeenAt) {
+          merged[uid] = rec;
+          memoryOnlineMap.set(uid, rec);
+        }
+      }
+    }
+
+    if (mutate) {
+      mutate(merged);
+      const pruned: Record<string, OnlineRecord> = {};
+      for (const [uid, rec] of Object.entries(merged)) {
+        if (rec && rec.lastSeenAt >= cutoff) {
+          pruned[uid] = rec;
+          memoryOnlineMap.set(uid, rec);
+        } else {
+          memoryOnlineMap.delete(uid);
+        }
+      }
+      await db.from('site_settings').upsert({
+        id: ONLINE_PRESENCE_ROW_ID,
+        data: { users: pruned },
+        updated_at: new Date().toISOString(),
+      });
+      return pruneAndSortOnline(pruned);
+    }
+  } catch {
+    if (mutate) {
+      mutate(merged);
+    }
+  }
+
+  return pruneAndSortOnline(merged);
+}
+
+app.post('/api/presence/heartbeat', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  const displayName = str(req.body?.displayName, 120) || session.username;
+  const avatar = str(req.body?.avatar, 2000);
+  const currentMenu = str(req.body?.currentMenu, 60);
+
+  const entry: OnlineRecord = {
+    userId: session.sub,
+    username: session.username,
+    displayName,
+    role: session.role,
+    avatar: avatar || undefined,
+    lastSeenAt: Date.now(),
+    currentMenu: currentMenu || undefined,
+  };
+  memoryOnlineMap.set(session.sub, entry);
+
+  const onlineUsers = await syncOnlinePresenceRow((map) => {
+    map[session.sub] = entry;
+  });
+
+  res.json({ onlineUsers, onlineCount: onlineUsers.length });
+}));
+
+app.post('/api/presence/offline', requireAuth, asyncRoute(async (req, res) => {
+  const session = sessionOf(req);
+  memoryOnlineMap.delete(session.sub);
+
+  const onlineUsers = await syncOnlinePresenceRow((map) => {
+    delete map[session.sub];
+  });
+
+  res.json({ ok: true, onlineUsers, onlineCount: onlineUsers.length });
+}));
+
+app.get('/api/presence/online', requireAuth, asyncRoute(async (_req, res) => {
+  const onlineUsers = await syncOnlinePresenceRow();
+  res.json({ onlineUsers, onlineCount: onlineUsers.length });
+}));
 
 // ---------- AI Multi-Engine Search ----------
 async function queryGemini(query: string, apiKey?: string): Promise<string> {

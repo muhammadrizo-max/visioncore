@@ -1,7 +1,7 @@
 import { PasswordAdminPanel } from './PasswordAdminPanel';
 import React, { useState, useMemo } from 'react';
 import { Users, UserPlus, Activity, TrendingUp, Clock, Shield, Search } from 'lucide-react';
-import { User, MemberActivity, Task, Order } from '../types';
+import { User, MemberActivity, Task, Order, OnlineUserInfo } from '../types';
 import { api } from '../lib/api';
 
 interface MembersViewProps {
@@ -10,6 +10,7 @@ interface MembersViewProps {
   activities: MemberActivity[];
   tasks: Task[];
   orders: Order[];
+  onlineUsers?: OnlineUserInfo[];
   onUpdateMember: (updatedUser: User) => void;
   onDeleteMember: (userId: string) => void;
   darkMode: boolean;
@@ -41,10 +42,12 @@ export const MembersView: React.FC<MembersViewProps> = ({
   activities,
   tasks,
   orders,
+  onlineUsers = [],
   onUpdateMember,
   onDeleteMember,
   darkMode,
 }) => {
+  const onlineSet = useMemo(() => new Set(onlineUsers.map((o) => o.userId)), [onlineUsers]);
   const [activeTab, setActiveTab] = useState<'manage' | 'activity' | 'productivity'>('manage');
   const [statusMsg, setStatusMsg] = useState('');
 
@@ -177,10 +180,19 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
   const renderNameCell = (u: User) => {
     const isEditing = editingUserId === u.id;
+    const isOnline = onlineSet.has(u.id) || u.id === currentUser.id;
     return (
       <td className="p-4">
         <div className="flex items-center space-x-3">
-          <img src={u.avatar} alt={u.username} className="w-8 h-8 rounded-full object-cover border border-slate-300 dark:border-white/20" />
+          <div className="relative flex-shrink-0">
+            <img src={u.avatar} alt={u.username} className="w-8 h-8 rounded-full object-cover border border-slate-300 dark:border-white/20" />
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-slate-900 ${
+                isOnline ? 'bg-emerald-500' : 'bg-slate-400'
+              }`}
+              title={isOnline ? 'Online' : 'Offline'}
+            />
+          </div>
           <div>
             {isEditing ? (
               <div className="flex space-x-1">
@@ -188,8 +200,13 @@ export const MembersView: React.FC<MembersViewProps> = ({
                 <input type="text" value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="px-2 py-1 rounded liquid-glass-subtle text-xs" />
               </div>
             ) : (
-              <div className="font-bold text-slate-900 dark:text-white">
-                {u.firstName || u.username} {u.lastName || ''}
+              <div className="font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                <span>{u.firstName || u.username} {u.lastName || ''}</span>
+                {isOnline && (
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                    Online
+                  </span>
+                )}
               </div>
             )}
             <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">{u.id}</span>
@@ -332,11 +349,17 @@ export const MembersView: React.FC<MembersViewProps> = ({
 
           {/* Jamoa a'zolari */}
           <div className="rounded-3xl liquid-glass overflow-hidden">
-            <div className="p-5 border-b border-slate-200/60 dark:border-white/10 flex items-center space-x-2">
-              <Shield className="w-4 h-4 text-blue-500" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                GURUH A'ZOLARI ({teamMembers.length})
-              </h3>
+            <div className="p-5 border-b border-slate-200/60 dark:border-white/10 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-4 h-4 text-blue-500" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  GURUH A'ZOLARI ({teamMembers.length})
+                </h3>
+              </div>
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center space-x-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>{teamMembers.filter((m) => onlineSet.has(m.id) || m.id === currentUser.id).length} ta online</span>
+              </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">

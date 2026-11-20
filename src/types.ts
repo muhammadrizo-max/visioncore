@@ -242,3 +242,14 @@ export interface NotificationItem {
   actionMenu?: string;
   readByUserIds?: string[];
 }
+
+export interface OnlineUserInfo {
+  userId: string;
+  username: string;
+  displayName: string;
+  role: RoleType;
+  avatar?: string;
+  lastSeenAt: number;
+  currentMenu?: string;
+}
+

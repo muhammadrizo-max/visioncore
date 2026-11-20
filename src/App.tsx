@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   User, Project, ChatMessage, Task, NoteItem, VersionPlan,
-  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, SiteSettings, Order, MemberActivity, BroadcastMessage
+  TestReport, ArchitectureDoc, ReminderPlan, NotificationItem, SiteSettings, Order, MemberActivity, BroadcastMessage, OnlineUserInfo
 } from './types';
 import {
   INITIAL_USERS, INITIAL_SITE_SETTINGS
 } from './mockData';
 import { fetchAllFromSupabase, sbSync } from './lib/supabase';
-import { api, getToken, clearToken } from './lib/api';
+import { api, apiPost, getToken, clearToken } from './lib/api';
+import { extractDmParticipants, mergeChatLists, sortChatMessages } from './lib/chatUtils';
 
 import { LandingPage } from './components/LandingPage';
 import { Header } from './components/Header';
@@ -29,31 +30,6 @@ import { ProfileView } from './components/ProfileView';
 import { SettingsView, UserWorkspacePrefs } from './components/SettingsView';
 import { StatisticsView } from './components/StatisticsView';
 import { MatrixRain } from './components/MatrixRain';
-
-function extractDmUsersFromChatId(chatId: string): [string, string] | null {
-  if (!chatId) return null;
-  if (chatId.startsWith('direct::')) {
-    const parts = chatId.slice(8).split('::').filter(Boolean);
-    if (parts.length === 2) return [parts[0], parts[1]];
-  }
-  if (chatId.startsWith('direct_')) {
-    const body = chatId.slice(7);
-    const matches = body.match(/vcg[-_]\d+/gi);
-    if (matches && matches.length === 2) return [matches[0], matches[1]];
-    const parts = body.split('_').filter(Boolean);
-    if (parts.length === 2) return [parts[0], parts[1]];
-  }
-  return null;
-}
-
-function sortChatsChronologically(list: ChatMessage[]): ChatMessage[] {
-  return [...list].sort((a, b) => {
-    const tsA = a.createdAt ? Date.parse(a.createdAt) : 0;
-    const tsB = b.createdAt ? Date.parse(b.createdAt) : 0;
-    if (tsA && tsB && tsA !== tsB) return tsA - tsB;
-    return a.id.localeCompare(b.id);
-  });
-}
 
 export default function App() {
   // Clean legacy dummy data once so real production counts start from 0
@@ -213,6 +189,7 @@ export default function App() {
   }, [siteSettings.creatorBackgroundType, siteSettings.creatorBackgroundImage]);
 
   const [userPrefs, setUserPrefs] = useState<UserWorkspacePrefs>(() => getDefaultUserPrefs(currentUser));
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUserInfo[]>([]);
   const [localChatNotifs, setLocalChatNotifs] = useState<NotificationItem[]>(() => {
     if (!currentUser) return [];
     try {
@@ -224,10 +201,13 @@ export default function App() {
   });
 
   const knownChatIdsRef = useRef<Set<string> | null>(null);
+  const pendingChatIdsRef = useRef<Set<string>>(new Set());
   const currentUserRef = useRef<User | null>(currentUser);
   currentUserRef.current = currentUser;
   const userPrefsRef = useRef<UserWorkspacePrefs>(userPrefs);
   userPrefsRef.current = userPrefs;
+  const activeMenuRef = useRef<string>(activeMenu);
+  activeMenuRef.current = activeMenu;
 
   useEffect(() => {
     setUserPrefs(getDefaultUserPrefs(currentUser));
@@ -274,7 +254,7 @@ export default function App() {
 
       if (msg.senderId === me.id) continue;
 
-      const dmParticipants = extractDmUsersFromChatId(msg.chatId || '');
+      const dmParticipants = extractDmParticipants(msg.chatId || '');
       const previewText = msg.audioUrl
         ? 'Ovozli xabar'
         : (msg.text || '').trim().slice(0, 65) + ((msg.text || '').length > 65 ? '...' : '');
@@ -363,9 +343,9 @@ export default function App() {
     if (data.tasks) setTasks(data.tasks);
     if (data.notes) setNotes(data.notes);
     if (data.chats) {
-      const sorted = sortChatsChronologically(data.chats);
-      processChatNotifs(sorted);
-      setChats(sorted);
+      const merged = mergeChatLists([], data.chats);
+      processChatNotifs(merged);
+      setChats(prev => mergeChatLists(prev, data.chats!, pendingChatIdsRef.current));
     }
     if (data.reminders) setReminders(data.reminders);
     if (data.activities) setActivities(data.activities);
@@ -391,8 +371,16 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  const handleSyncServerChats = useCallback((freshChats: ChatMessage[]) => {
+    processChatNotifs(freshChats);
+    setChats(prev => mergeChatLists(prev, freshChats, pendingChatIdsRef.current));
+  }, [processChatNotifs]);
+
   useEffect(() => {
-    if (!currentUser || !getToken()) return;
+    if (!currentUser || !getToken()) {
+      setOnlineUsers([]);
+      return;
+    }
     void syncWithSupabase();
     const timer = setInterval(() => {
       void syncWithSupabase();
@@ -404,20 +392,83 @@ export default function App() {
       try {
         const freshChats = await api<ChatMessage[]>('/api/chats');
         if (Array.isArray(freshChats)) {
-          const sorted = sortChatsChronologically(freshChats);
-          processChatNotifs(sorted);
-          setChats(sorted);
+          handleSyncServerChats(freshChats);
         }
       } catch {
         // ignore
       }
     }, 3500);
 
+    // Real-time online presence heartbeat (works across localhost + Vercel serverless via Supabase)
+    const sendHeartbeat = async () => {
+      const me = currentUserRef.current;
+      if (!me || !getToken()) return;
+      try {
+        const res = await apiPost<{ onlineUsers: OnlineUserInfo[] }>('/api/presence/heartbeat', {
+          displayName: `${me.firstName || me.username} ${me.lastName || ''}`.trim(),
+          avatar: me.avatar || '',
+          currentMenu: activeMenuRef.current,
+        });
+        if (res && Array.isArray(res.onlineUsers)) {
+          setOnlineUsers(res.onlineUsers);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    void sendHeartbeat();
+    const heartbeatTimer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') {
+        void sendHeartbeat();
+      }
+    }, 12000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void sendHeartbeat();
+      }
+    };
+    const onPageHide = () => {
+      const token = getToken();
+      if (token) {
+        fetch('/api/presence/offline', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: '{}',
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', onPageHide);
+
     return () => {
       clearInterval(timer);
       clearInterval(chatTimer);
+      clearInterval(heartbeatTimer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', onPageHide);
     };
-  }, [currentUser, syncWithSupabase, processChatNotifs]);
+  }, [currentUser, syncWithSupabase, handleSyncServerChats]);
+
+  // Update server presence immediately when switching menu tab
+  useEffect(() => {
+    if (!currentUser || !getToken()) return;
+    void apiPost<{ onlineUsers: OnlineUserInfo[] }>('/api/presence/heartbeat', {
+      displayName: `${currentUser.firstName || currentUser.username} ${currentUser.lastName || ''}`.trim(),
+      avatar: currentUser.avatar || '',
+      currentMenu: activeMenu,
+    })
+      .then((res) => {
+        if (res && Array.isArray(res.onlineUsers)) setOnlineUsers(res.onlineUsers);
+      })
+      .catch(() => {});
+  }, [activeMenu, currentUser?.id]);
 
   const handleClearNotifications = () => {
     setNotifications([]);
@@ -522,7 +573,11 @@ export default function App() {
 
   const handleLogout = () => {
     logActivity('Tizimdan chiqdi');
+    if (getToken()) {
+      void apiPost('/api/presence/offline', {}).catch(() => {});
+    }
     clearToken();
+    setOnlineUsers([]);
     setCurrentUser(null);
   };
 
@@ -607,15 +662,42 @@ export default function App() {
     logActivity(`A'zo o'chirildi (ID: ${userId})`);
   };
 
-  // Chat Handlers
+  // Chat Handlers (single authoritative POST with pending protection so polls never jumble order)
   const handleSendMessage = (msg: ChatMessage) => {
     processChatNotifs([msg]);
+    const isMine = Boolean(currentUser && msg.senderId === currentUser.id);
+    if (isMine) {
+      pendingChatIdsRef.current.add(msg.id);
+    }
+
     setChats(prev => {
       if (prev.some(m => m.id === msg.id)) return prev;
-      return sortChatsChronologically([...prev, msg]);
+      return sortChatMessages([...prev, msg]);
     });
-    if (currentUser && msg.senderId === currentUser.id) {
-      void sbSync.upsertChat(msg);
+
+    if (isMine && getToken()) {
+      try {
+        const bc = new BroadcastChannel('visioncore_live_chats');
+        bc.postMessage({ type: 'NEW_MESSAGE', message: msg });
+        bc.close();
+      } catch {
+        // ignore
+      }
+
+      void apiPost<{ ok: boolean; createdAt?: string }>('/api/chats', msg)
+        .then((res) => {
+          pendingChatIdsRef.current.delete(msg.id);
+          if (res?.createdAt) {
+            setChats(prev =>
+              sortChatMessages(
+                prev.map(m => (m.id === msg.id ? { ...m, createdAt: res.createdAt } : m))
+              )
+            );
+          }
+        })
+        .catch(() => {
+          pendingChatIdsRef.current.delete(msg.id);
+        });
     }
   };
 
@@ -917,6 +999,7 @@ export default function App() {
         onNavigateMenu={setActiveMenu}
         notifications={combinedNotifications}
         broadcasts={siteSettings.broadcasts || []}
+        onlineUsers={onlineUsers}
         onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
         onMarkNotificationRead={handleMarkNotificationRead}
         onClearNotifications={handleClearNotifications}
@@ -946,6 +1029,7 @@ export default function App() {
               tasks={tasks}
               activities={activities}
               siteSettings={siteSettings}
+              onlineUsers={onlineUsers}
               onAddReminder={handleAddReminder}
               onToggleReminder={handleToggleReminder}
               onDeleteReminder={handleDeleteReminder}
@@ -984,6 +1068,7 @@ export default function App() {
               activities={activities}
               tasks={tasks}
               orders={orders}
+              onlineUsers={onlineUsers}
               onUpdateMember={handleUpdateMember}
               onDeleteMember={handleDeleteMember}
               darkMode={darkMode}
@@ -1005,6 +1090,15 @@ export default function App() {
               currentUser={currentUser}
               allUsers={users}
               chats={chats}
+              onlineUsers={onlineUsers}
+              groupChatNotifications={userPrefs.groupChatNotifications}
+              onToggleGroupChatNotifications={() =>
+                handleUpdateUserPrefs({
+                  ...userPrefs,
+                  groupChatNotifications: !userPrefs.groupChatNotifications,
+                })
+              }
+              onSyncServerChats={handleSyncServerChats}
               onSendMessage={handleSendMessage}
               onEditMessage={handleEditMessage}
               onDeleteMessage={handleDeleteMessage}

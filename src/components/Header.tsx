@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Shield, Moon, Sun, ChevronLeft, Bell, CheckCheck, Trash2, Megaphone, ShoppingBag, CheckSquare, MessageSquare } from 'lucide-react';
-import { User, NotificationItem, BroadcastMessage } from '../types';
+import { Shield, Moon, Sun, ChevronLeft, Bell, CheckCheck, Trash2, Megaphone, ShoppingBag, CheckSquare, MessageSquare, Users } from 'lucide-react';
+import { User, NotificationItem, BroadcastMessage, OnlineUserInfo } from '../types';
 
 interface HeaderProps {
   user: User;
@@ -12,6 +12,7 @@ interface HeaderProps {
   onNavigateMenu: (menu: string) => void;
   notifications: NotificationItem[];
   broadcasts?: BroadcastMessage[];
+  onlineUsers?: OnlineUserInfo[];
   onMarkAllNotificationsRead: () => void;
   onMarkNotificationRead?: (notifId: string) => void;
   onClearNotifications: () => void;
@@ -28,13 +29,16 @@ export const Header: React.FC<HeaderProps> = ({
   onNavigateMenu,
   notifications,
   broadcasts = [],
+  onlineUsers = [],
   onMarkAllNotificationsRead,
   onMarkNotificationRead,
   onClearNotifications,
   onMarkBroadcastRead,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showOnlinePopover, setShowOnlinePopover] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const onlineRef = useRef<HTMLDivElement>(null);
 
   const isCreator = user.role === 'creator';
   const isTeamMember = user.role !== 'user';
@@ -73,6 +77,9 @@ export const Header: React.FC<HeaderProps> = ({
     const handleClickOutside = (e: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
         setShowNotifications(false);
+      }
+      if (onlineRef.current && !onlineRef.current.contains(e.target as Node)) {
+        setShowOnlinePopover(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -165,13 +172,129 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Right side controls: Notifications/Broadcasts, Theme, User Profile */}
+      {/* Right side controls: Live Online Users, Notifications/Broadcasts, Theme, User Profile */}
       <div className="flex items-center space-x-2 sm:space-x-3">
+        {/* Live Online Users Pill & Dropdown */}
+        <div className="relative" ref={onlineRef}>
+          <button
+            id="header-online-users-btn"
+            onClick={() => {
+              setShowOnlinePopover((v) => !v);
+              setShowNotifications(false);
+            }}
+            className="px-2.5 sm:px-3 py-2 rounded-xl liquid-glass-subtle hover:bg-emerald-500/15 text-slate-700 dark:text-slate-200 transition cursor-pointer active:scale-95 flex items-center space-x-1.5"
+            title="Hozir saytda online bo'lgan foydalanuvchilar"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums">
+              {onlineUsers.length || 1}
+            </span>
+            <span className="hidden md:inline text-[11px] font-bold text-slate-600 dark:text-slate-300">
+              online
+            </span>
+          </button>
+
+          {showOnlinePopover && (
+            <div className="absolute right-0 mt-2.5 w-[min(90vw,20rem)] rounded-3xl liquid-glass border border-slate-200/80 dark:border-white/15 shadow-2xl p-4 space-y-3 z-50 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-white/10 pb-2.5">
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-emerald-500" />
+                  <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    Hozir Online ({onlineUsers.length || 1})
+                  </h3>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  Jonli
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {onlineUsers.length === 0 ? (
+                  <div className="flex items-center justify-between p-2.5 rounded-2xl liquid-glass-subtle text-xs">
+                    <div className="flex items-center space-x-2.5">
+                      <img src={user.avatar} alt={user.username} className="w-8 h-8 rounded-xl object-cover border border-emerald-500/40" />
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-white">
+                          {user.firstName || user.username} {user.lastName || ''} (Siz)
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold">
+                          {user.role}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  </div>
+                ) : (
+                  onlineUsers.map((ou) => {
+                    const isSelf = ou.userId === user.id;
+                    return (
+                      <div
+                        key={ou.userId}
+                        className="flex items-center justify-between p-2.5 rounded-2xl liquid-glass-subtle text-xs gap-2"
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <div className="relative flex-shrink-0">
+                            <img
+                              src={
+                                ou.avatar ||
+                                `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(ou.username)}`
+                              }
+                              alt={ou.username}
+                              className="w-8 h-8 rounded-xl object-cover border border-slate-300 dark:border-white/20"
+                            />
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 dark:text-white truncate">
+                              {ou.displayName || ou.username} {isSelf ? '(Siz)' : ''}
+                            </div>
+                            <div className="flex items-center space-x-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                              <span className="uppercase font-extrabold text-blue-600 dark:text-blue-400">
+                                {ou.role}
+                              </span>
+                              {ou.currentMenu && (
+                                <>
+                                  <span>•</span>
+                                  <span className="truncate">{ou.currentMenu}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {!isSelf && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onNavigateMenu('Chat');
+                              setShowOnlinePopover(false);
+                            }}
+                            className="p-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600 text-blue-600 dark:text-blue-400 hover:text-white transition cursor-pointer flex-shrink-0"
+                            title="Suhbatga o'tish"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Notifications & Broadcasts Button & Dropdown */}
         <div className="relative" ref={notifRef}>
           <button
             id="header-notifications-btn"
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => {
+              setShowNotifications(!showNotifications);
+              setShowOnlinePopover(false);
+            }}
             className="relative p-2.5 rounded-xl liquid-glass-subtle hover:bg-blue-500/15 text-slate-700 dark:text-slate-200 transition cursor-pointer active:scale-95"
             title="Bildirishnomalar"
           >
